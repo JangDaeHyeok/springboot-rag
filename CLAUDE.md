@@ -220,8 +220,9 @@ LLM 답변 생성 **후** 사용자에게 반환하기 전 검사:
 docker compose up -d
 
 # 환경변수 설정
-export OPENAI_API_KEY=sk-...              # Chat LLM + 가드레일용 (필수)
-export DOUZONE_EMBEDDING_URL=https://...  # Douzone 임베딩 API (사내망 필요, 미설정 시 기본값 사용)
+export OPENAI_API_KEY=sk-...                                      # Chat LLM + 가드레일용 (필수)
+export DOUZONE_EMBEDDING_URL=https://private-ai.example.com/...   # Douzone 임베딩 API (필수, 기본값 없음)
+export DB_PASSWORD=ragpass                                        # DB 패스워드 (미설정 시 ragpass 사용)
 
 # 애플리케이션 실행 (in-memory 모드: DB 없이 테스트 가능)
 ./gradlew bootRun --args='--rag.keyword-search-type=memory'
@@ -240,7 +241,8 @@ export DOUZONE_EMBEDDING_URL=https://...  # Douzone 임베딩 API (사내망 필
 | `spring.ai.openai.embedding.enabled` | `false` | `false` |
 | `spring.sql.init.mode` | `always` | `never` |
 | `OPENAI_API_KEY` | 발급받은 키 | 발급받은 키 또는 사내 관리 키 |
-| `DOUZONE_EMBEDDING_URL` | 사내망 URL | 사내망 URL |
+| `DOUZONE_EMBEDDING_URL` | 사내망 URL **(필수, 기본값 없음)** | 사내망 URL |
+| `DB_PASSWORD` | 미설정 시 `ragpass` | 운영 DB 패스워드 |
 
 > **임베딩 모델 전환 시 주의**: `rag.embedding.type`을 변경하면 벡터 공간이 달라지므로 기존 문서를 전부 재수집(re-ingest)해야 한다. `vector_store` 테이블은 DROP 후 재생성 필요.
 
