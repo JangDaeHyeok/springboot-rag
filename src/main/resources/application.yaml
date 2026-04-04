@@ -1,0 +1,96 @@
+spring:
+  application:
+    name: rag
+
+  # ── MVC: 404를 NoHandlerFoundException으로 전환 (RagExceptionAdvice가 처리) ───
+  mvc:
+    throw-exception-if-no-handler-found: true
+  web:
+    resources:
+      add-mappings: false
+
+  # ── PostgreSQL (도커: docker compose up -d) ───────────────────────────────
+  datasource:
+    url: jdbc:postgresql://localhost:5432/ragdb
+    username: raguser
+    password: ${DB_PASSWORD:ragpass}
+    driver-class-name: org.postgresql.Driver
+
+  # ── Spring Data JPA ────────────────────────────────────────────────────────
+  jpa:
+    hibernate:
+      ddl-auto: none
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  # ── DB 스키마 초기화 (rag_chunks, search_logs) ─────────────────────────────
+  # vector_store 는 Spring AI PGVector 가 자동 생성
+  sql:
+    init:
+      mode: always
+      schema-locations: classpath:db/schema.sql
+
+  # ── OpenAI ────────────────────────────────────────────────────────────────
+  ai:
+    openai:
+      api-key: ${OPENAI_API_KEY:change-me}
+
+      # Chat: 질의응답 LLM
+      chat:
+        options:
+          model: gpt-4o-mini
+          temperature: 0.2        # 사실 기반 답변이 목적이므로 낮게 설정
+
+      # Embedding: rag.embedding.type=openai 일 때만 활성화
+      # Douzone 임베딩을 사용하는 경우 false로 설정한다.
+      embedding:
+        enabled: false
+
+    # ── Spring AI PGVector ───────────────────────────────────────────────────
+    # dimensions 는 임베딩 모델 출력 차원과 반드시 동일하게 설정한다.
+    # 임베딩 모델을 변경할 경우 vector_store 테이블을 DROP 후 재생성이 필요하다.
+    vectorstore:
+      pgvector:
+        initialize-schema: true
+        index-type: HNSW
+        distance-type: COSINE_DISTANCE
+        dimensions: 1024          # text-embedding-3-small dimensions 와 동일
+
+# ── RAG 파이프라인 ─────────────────────────────────────────────────────────────
+rag:
+  # 임베딩 모델 선택: openai | douzone
+  # - openai  : OpenAI text-embedding-3-small (OPENAI_API_KEY 환경변수 필요)
+  # - douzone : Douzone 사내 임베딩 API (사내망 접근 필요)
+  embedding:
+    type: douzone
+
+    # Douzone 사내 임베딩 API 설정 (rag.embedding.type=douzone 일 때만 사용)
+    douzone:
+      url: ${DOUZONE_EMBEDDING_URL}
+      dimensions: 1024
+      response-field: embedding
+      connect-timeout: 5000
+      read-timeout: 30000
+
+  # 소프트 가드레일: true이면 OpenAI ChatClient 기반 가드레일 활성화
+  guardrail:
+    enabled: true
+
+  # 키워드 검색 어댑터: postgres(운영) | memory(개발·테스트)
+  keyword-search-type: postgres
+
+  rrf-k: 60
+  top-n-keyword: 50
+  top-n-vector: 50
+  top-k-final: 5
+
+  # Cosine 유사도 하한 (로그 기반으로 튜닝)
+  vector-threshold: 0.6
+
+  max-chars-per-chunk: 1200
+
+  chunk:
+    size: 600
+    overlap: 100
