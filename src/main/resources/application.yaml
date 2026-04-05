@@ -87,3 +87,8 @@ rag:
   chunk:
     size: 600
     overlap: 100
+    # 청킹 전략: semantic(기본값) | fixed
+    # - semantic : LLM이 구조 여부를 판단. 구조가 있으면 조항·항목 단위로 분리,
+    #              없으면 fixed로 자동 대체. 텍스트 20,000자 초과·LLM 실패 시에도 fixed로 대체.
+    # - fixed    : 고정 토큰 크기로 분리 (TokenTextSplitter)
+    strategy: semantic

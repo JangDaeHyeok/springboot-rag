@@ -1,10 +1,10 @@
 package com.jdh.rag.service;
 
-import com.jdh.rag.config.RagProperties;
 import com.jdh.rag.domain.IngestionRequest;
 import com.jdh.rag.domain.IngestionResult;
 import com.jdh.rag.exception.IngestionException;
 import com.jdh.rag.exception.common.enums.RagExceptionEnum;
+import com.jdh.rag.port.ChunkSplitterPort;
 import com.jdh.rag.port.KeywordIndexPort;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -22,7 +22,6 @@ import java.io.IOException;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.Mockito.*;
 
@@ -32,17 +31,17 @@ class IngestionServiceTest {
 
     @Mock private VectorStore vectorStore;
     @Mock private KeywordIndexPort keywordIndexPort;
-    @Mock private RagProperties ragProperties;
+    @Mock private ChunkSplitterPort chunkSplitterPort;
 
     private IngestionService service;
 
     @BeforeEach
     void setUp() {
-        RagProperties.ChunkProperties chunk = mock(RagProperties.ChunkProperties.class);
-        when(chunk.size()).thenReturn(600);
-        when(ragProperties.chunk()).thenReturn(chunk);
+        // 청킹을 통과(입력 그대로 반환)시켜 IngestionService 로직에 집중한다.
+        // LENIENT: 빈 content 등 예외가 split 호출 전 throw되는 테스트에서 미사용 stubbing 허용
+        when(chunkSplitterPort.split(anyList())).thenAnswer(inv -> inv.getArgument(0));
 
-        service = new IngestionService(vectorStore, keywordIndexPort, ragProperties);
+        service = new IngestionService(vectorStore, keywordIndexPort, chunkSplitterPort);
     }
 
     // ── ingest (텍스트) ────────────────────────────────────────────────────────

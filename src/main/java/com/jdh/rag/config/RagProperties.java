@@ -21,6 +21,7 @@ public record RagProperties(
 
     public record ChunkProperties(
             @DefaultValue("600") int size,
-            @DefaultValue("100") int overlap
+            @DefaultValue("100") int overlap,
+            @DefaultValue("semantic") String strategy
     ) {}
 }

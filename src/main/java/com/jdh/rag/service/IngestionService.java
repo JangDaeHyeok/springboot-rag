@@ -1,17 +1,16 @@
 package com.jdh.rag.service;
 
-import com.jdh.rag.config.RagProperties;
 import com.jdh.rag.domain.IngestionRequest;
 import com.jdh.rag.domain.IngestionResult;
 import com.jdh.rag.domain.SearchHit;
 import com.jdh.rag.exception.IngestionException;
 import com.jdh.rag.exception.common.enums.RagExceptionEnum;
+import com.jdh.rag.port.ChunkSplitterPort;
 import com.jdh.rag.port.KeywordIndexPort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.reader.tika.TikaDocumentReader;
-import org.springframework.ai.transformer.splitter.TokenTextSplitter;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Service;
@@ -35,7 +34,7 @@ public class IngestionService {
 
     private final VectorStore vectorStore;
     private final KeywordIndexPort keywordIndexPort;
-    private final RagProperties ragProperties;
+    private final ChunkSplitterPort chunkSplitterPort;
 
     // ── 텍스트 직접 수집 ───────────────────────────────────────────────────────
 
@@ -90,16 +89,8 @@ public class IngestionService {
     // ── 내부 처리 ──────────────────────────────────────────────────────────────
 
     private IngestionResult processDocuments(List<Document> docs, String docId) {
-        // 1) 청킹 (TokenTextSplitter)
-        TokenTextSplitter splitter = TokenTextSplitter.builder()
-                .withChunkSize(ragProperties.chunk().size())
-                .withMinChunkSizeChars(50)
-                .withMinChunkLengthToEmbed(5)
-                .withMaxNumChunks(10000)
-                .withKeepSeparator(true)
-                .build();
-
-        List<Document> chunks = splitter.apply(docs);
+        // 1) 청킹 (전략은 ChunkSplitterPort 구현체가 결정: fixed | semantic)
+        List<Document> chunks = chunkSplitterPort.split(docs);
 
         // 2) chunkId 주입
         List<Document> annotated = annotateChunks(chunks, docId);

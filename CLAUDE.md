@@ -54,6 +54,7 @@ config/              ← Spring 설정
 | `KeywordSearchPort` | BM25 키워드 검색 | `PgKeywordSearchAdapter` / `InMemoryKeywordSearchAdapter` (`rag.keyword-search-type`) |
 | `KeywordIndexPort` | 문서 BM25 색인 | 동일 어댑터가 구현 |
 | `VectorSearchPort` | Cosine 벡터 검색 | `SpringAiVectorSearchAdapter` |
+| `ChunkSplitterPort` | 문서 청킹 | `FixedTokenChunkSplitter`(기본) / `SemanticChunkSplitter` (`rag.chunk.strategy`) |
 | `RerankPort` | 검색 결과 재정렬 | `ScoreRerankAdapter` / `DateDescRerankAdapter` — `RerankDispatcher`가 위임 |
 | `InputGuardrailPort` | 입력 안전 검사 | `OpenAiGuardrailAdapter` / `NoOpGuardrailAdapter` (`rag.guardrail.enabled`) |
 | `OutputGuardrailPort` | 출력 안전 검사 | 동일 어댑터가 구현 |
@@ -67,6 +68,7 @@ config/              ← Spring 설정
   - `rag.keyword-search-type=postgres|memory`
   - `rag.embedding.type=douzone|openai`
   - `rag.guardrail.enabled=true|false`
+  - `rag.chunk.strategy=fixed|semantic`
 
 ---
 
@@ -238,6 +240,7 @@ export DB_PASSWORD=ragpass                                        # DB 패스워
 | `rag.keyword-search-type` | `memory` | `postgres` |
 | `rag.embedding.type` | `douzone` | `douzone` |
 | `rag.guardrail.enabled` | `false` (권장) | `true` |
+| `rag.chunk.strategy` | `semantic` (기본값) | `semantic` |
 | `spring.ai.openai.embedding.enabled` | `false` | `false` |
 | `spring.sql.init.mode` | `always` | `never` |
 | `OPENAI_API_KEY` | 발급받은 키 | 발급받은 키 또는 사내 관리 키 |
@@ -295,7 +298,12 @@ RagController
 IngestionController
   └─ IngestionService.ingest() / ingestResource()
        ├─ TikaDocumentReader   (파일 파싱)
-       ├─ 청킹 (size=600, overlap=100)
+       ├─ ChunkSplitterPort    (청킹 전략 위임)
+       │    ├─ FixedTokenChunkSplitter  [strategy=fixed, 기본값]
+       │    │    └─ TokenTextSplitter (size=600)
+       │    └─ SemanticChunkSplitter   [strategy=semantic, 기본값]
+       │         ├─ OpenAI ChatClient → 구조 판단 + JSON chunks 반환
+       │         └─ (LLM이 구조 없다고 판단·LLM 실패·과대 텍스트) → TokenTextSplitter 대체
        ├─ KeywordIndexPort     (BM25 색인 등록)
        └─ VectorStore.add()    (임베딩 + PGVector 저장)
 ```

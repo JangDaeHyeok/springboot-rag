@@ -160,7 +160,17 @@ Content-Type: application/json
 | `rag.guardrail.enabled` | `true` | 소프트 가드레일 활성화 여부 |
 | `rag.top-k-final` | `5` | 최종 검색 결과 수 |
 | `rag.vector-threshold` | `0.6` | 벡터 유사도 하한선 |
-| `rag.chunk.size` | `600` | 청킹 크기 (문자) |
+| `rag.chunk.size` | `600` | 고정 청킹 크기 (토큰 수) |
+| `rag.chunk.strategy` | `semantic` | 청킹 전략 (`semantic` \| `fixed`) |
+
+#### 청킹 전략 (`rag.chunk.strategy`)
+
+| 전략 | 동작 |
+|---|---|
+| `semantic` (기본값) | LLM이 구조 여부를 직접 판단. 구조가 있으면 조항·항목 단위로 분리, 없으면 `fixed`로 자동 대체. 텍스트 20,000자 초과·LLM 실패 시에도 `fixed`로 대체. |
+| `fixed` | 고정 토큰 크기(`rag.chunk.size`)로 분리 |
+
+> **비용 주의**: `rag.chunk.strategy=semantic`이면 수집 요청당 최대 LLM 호출 1회 추가 발생.
 
 > **임베딩 모델 전환 시 주의**: `rag.embedding.type` 변경 시 벡터 공간이 달라지므로 `vector_store` 테이블 DROP 후 문서 전체 재수집 필요.
 
