@@ -1,6 +1,7 @@
 package com.jdh.rag.adapter;
 
 import com.jdh.rag.domain.GuardrailResult;
+import com.jdh.rag.support.prompt.GuardrailPrompts;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -25,7 +26,7 @@ class OpenAiGuardrailAdapterTest {
 
     @BeforeEach
     void setUp() {
-        adapter = new OpenAiGuardrailAdapter(chatClient, new ObjectMapper());
+        adapter = new OpenAiGuardrailAdapter(chatClient, new ObjectMapper(), new GuardrailPrompts());
     }
 
     // ── parseResponse 단위 테스트 (LLM 호출 없음) ────────────────────────────

@@ -2,6 +2,7 @@ package com.jdh.rag.adapter.chunk;
 
 import com.jdh.rag.config.RagProperties;
 import com.jdh.rag.port.ChunkSplitterPort;
+import com.jdh.rag.support.prompt.ChunkSplitterPrompts;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -36,26 +37,16 @@ import java.util.List;
 @ConditionalOnProperty(name = "rag.chunk.strategy", havingValue = "semantic", matchIfMissing = true)
 public class SemanticChunkSplitter implements ChunkSplitterPort {
 
-    private final ChatClient chatClient;
-    private final RagProperties ragProperties;
-    private final ObjectMapper objectMapper;
+    private final ChatClient          chatClient;
+    private final RagProperties       ragProperties;
+    private final ObjectMapper        objectMapper;
+    private final ChunkSplitterPrompts prompts;
 
     /**
      * 시맨틱 청킹을 적용할 최대 문자 수.
      * 초과 시 LLM 호출 없이 고정 토큰 크기 방식으로 대체한다.
      */
     static final int MAX_SEMANTIC_CHARS = 20_000;
-
-    private static final String CHUNK_SYSTEM_PROMPT = """
-            당신은 문서 분석 전문가입니다.
-            주어진 문서가 조항(제N조), 항목 번호(N. 또는 (N)) 등 명확한 구조적 단위로 구성되어 있는지 판단하세요.
-
-            - 구조가 있으면: 각 구조 단위를 독립된 청크로 분리해 JSON 형식으로 반환하세요.
-              {"chunks": ["청크1 내용", "청크2 내용", ...]}
-              각 청크는 구조 단위 번호와 내용을 모두 포함해야 합니다.
-            - 구조가 없으면: 빈 배열을 반환하세요.
-              {"chunks": []}
-            """;
 
     @Override
     public List<Document> split(List<Document> docs) {
@@ -90,7 +81,7 @@ public class SemanticChunkSplitter implements ChunkSplitterPort {
     private List<String> requestChunksFromLlm(String text) {
         try {
             String response = chatClient.prompt()
-                    .system(CHUNK_SYSTEM_PROMPT)
+                    .system(prompts.system())
                     .user(text)
                     .call()
                     .content();

@@ -1,6 +1,7 @@
 package com.jdh.rag.adapter;
 
 import com.jdh.rag.domain.ProcessedQuery;
+import com.jdh.rag.support.prompt.QueryPreprocessPrompts;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -25,7 +26,7 @@ class LlmQueryPreprocessAdapterTest {
 
     @BeforeEach
     void setUp() {
-        adapter = new LlmQueryPreprocessAdapter(chatClient, new ObjectMapper());
+        adapter = new LlmQueryPreprocessAdapter(chatClient, new ObjectMapper(), new QueryPreprocessPrompts());
     }
 
     // ── preprocess ─────────────────────────────────────────────────────────────

@@ -1,6 +1,7 @@
 package com.jdh.rag.adapter.chunk;
 
 import com.jdh.rag.config.RagProperties;
+import com.jdh.rag.support.prompt.ChunkSplitterPrompts;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -40,7 +41,7 @@ class SemanticChunkSplitterTest {
         when(ragProperties.chunk()).thenReturn(chunk);
         when(chunk.size()).thenReturn(600);
 
-        splitter = new SemanticChunkSplitter(chatClient, ragProperties, new ObjectMapper());
+        splitter = new SemanticChunkSplitter(chatClient, ragProperties, new ObjectMapper(), new ChunkSplitterPrompts());
     }
 
     // ── 시맨틱 청킹 (LLM이 구조 있다고 판단) ─────────────────────────────────

@@ -2,6 +2,7 @@ package com.jdh.rag.adapter;
 
 import com.jdh.rag.domain.ProcessedQuery;
 import com.jdh.rag.port.QueryPreprocessPort;
+import com.jdh.rag.support.prompt.QueryPreprocessPrompts;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -29,32 +30,16 @@ import tools.jackson.databind.ObjectMapper;
 @RequiredArgsConstructor
 public class LlmQueryPreprocessAdapter implements QueryPreprocessPort {
 
-    private final ChatClient chatClient;
-    private final ObjectMapper objectMapper;
-
-    private static final String SYSTEM_PROMPT = """
-            당신은 검색 쿼리 최적화 전문가입니다.
-            사용자 질의를 분석하고 반드시 아래 JSON 형식으로만 응답하세요. 다른 설명은 불필요합니다.
-            {
-              "keywordQuery": "BM25 키워드 검색에 최적화된 핵심 명사·동사 중심 쿼리",
-              "vectorQuery": "해당 질문의 이상적인 답변이 담긴 가상의 문서 내용 (2~3문장)"
-            }
-            """;
-
-    private static final String USER_PROMPT_TEMPLATE = """
-            원문 질의: %s
-
-            변환 기준:
-            - keywordQuery: 구어체·조사·접속사를 제거하고 핵심 명사와 동사만 남겨 BM25 검색어로 만드세요.
-            - vectorQuery: 이 질문에 대한 이상적인 답변이 실제로 문서에 있다면 어떤 내용일지 2~3문장으로 서술하세요. (HyDE 기법)
-            """;
+    private final ChatClient            chatClient;
+    private final ObjectMapper          objectMapper;
+    private final QueryPreprocessPrompts prompts;
 
     @Override
     public ProcessedQuery preprocess(String query) {
         try {
             String response = chatClient.prompt()
-                    .system(SYSTEM_PROMPT)
-                    .user(USER_PROMPT_TEMPLATE.formatted(query))
+                    .system(prompts.system())
+                    .user(prompts.userTemplate().formatted(query))
                     .call()
                     .content();
             return parseResponse(response, query);

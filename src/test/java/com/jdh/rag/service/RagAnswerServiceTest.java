@@ -11,6 +11,7 @@ import com.jdh.rag.port.InputGuardrailPort;
 import com.jdh.rag.port.OutputGuardrailPort;
 import com.jdh.rag.port.QueryPreprocessPort;
 import com.jdh.rag.support.ContextBuilder;
+import com.jdh.rag.support.prompt.RagAnswerPrompts;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -62,7 +63,7 @@ class RagAnswerServiceTest {
                 .thenAnswer(inv -> new ProcessedQuery(inv.getArgument(0), inv.getArgument(0)));
 
         service = new RagAnswerService(hybridSearchService, contextBuilder, chatClient, ragProperties,
-                inputGuardrailPort, outputGuardrailPort, queryPreprocessPort);
+                inputGuardrailPort, outputGuardrailPort, queryPreprocessPort, new RagAnswerPrompts());
     }
 
     // ── 정상 케이스 ────────────────────────────────────────────────────────────
