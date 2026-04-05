@@ -12,11 +12,18 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.concurrent.StructuredTaskScope;
 import java.util.function.Supplier;
 
 /**
  * 하이브리드 검색 파이프라인:
- * BM25 keyword → Vector → RRF 결합 → 리랭킹(sortByLatest) → 검색 로그 적재
+ * BM25 keyword + Vector를 StructuredTaskScope(virtual thread)로 병렬 실행 → RRF 결합 → 리랭킹(sortByLatest) → 검색 로그 적재
+ *
+ * <p>두 검색 모두 I/O 바운드(DB 쿼리)이므로 virtual thread 병렬화로
+ * 지연 시간이 keyword_time + vector_time → max(keyword_time, vector_time) 으로 단축된다.
+ *
+ * <p>StructuredTaskScope는 두 subtask의 생명주기를 try 블록에 묶어
+ * 스레드 누수 없이 구조적으로 관리한다.
  */
 @Slf4j
 @Service
@@ -30,17 +37,33 @@ public class HybridSearchService {
     private final SearchLogger      searchLogger;
 
     public List<SearchHit> search(HybridSearchRequest request, String requestId) {
-        // 1) 각각 topN 검색 (실패 시 빈 목록으로 degrade)
-        List<SearchHit> lexical = safeSearch(() ->
-                keywordSearchPort.search(request.query(), request.topNKeyword(), request.filters()),
-                "keyword"
-        );
+        // 1) BM25 + Vector 병렬 검색 (각각 실패 시 빈 목록으로 degrade)
+        List<SearchHit> lexical;
+        List<SearchHit> vector;
 
-        List<SearchHit> vector = safeSearch(() ->
-                vectorSearchPort.search(request.query(), request.topNVector(),
-                        request.vectorThreshold(), request.filters()),
-                "vector"
-        );
+        try (var scope = StructuredTaskScope.open()) {
+            var lexicalTask = scope.fork(() ->
+                    safeSearch(() ->
+                            keywordSearchPort.search(request.keywordQuery(), request.topNKeyword(), request.filters()),
+                            "keyword"));
+            var vectorTask = scope.fork(() ->
+                    safeSearch(() ->
+                            vectorSearchPort.search(request.vectorQuery(), request.topNVector(),
+                                    request.vectorThreshold(), request.filters()),
+                            "vector"));
+
+            scope.join();   // 두 subtask 모두 완료될 때까지 대기
+            // safeSearch가 예외를 내부에서 흡수하므로 subtask는 항상 정상 완료
+            lexical = lexicalTask.get();
+            vector  = vectorTask.get();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            log.error("병렬 검색 인터럽트 (빈 결과 반환): {}", e.getMessage());
+            return List.of();
+        } catch (Exception e) {
+            log.error("병렬 검색 실패 (빈 결과 반환): {}", e.getMessage());
+            return List.of();
+        }
 
         log.debug("하이브리드 검색: lexical={}건, vector={}건", lexical.size(), vector.size());
 

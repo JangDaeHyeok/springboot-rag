@@ -58,6 +58,15 @@ dependencies {
 	testAnnotationProcessor 'org.projectlombok:lombok'
 }
 
+tasks.withType(JavaCompile).configureEach {
+	options.compilerArgs += ['--enable-preview']
+}
+
 tasks.named('test') {
 	useJUnitPlatform()
+	jvmArgs '--enable-preview'
+}
+
+tasks.named('bootRun') {
+	jvmArgs '--enable-preview'
 }

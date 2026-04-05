@@ -3,12 +3,14 @@ package com.jdh.rag.service;
 import com.jdh.rag.config.RagProperties;
 import com.jdh.rag.domain.GuardrailResult;
 import com.jdh.rag.domain.HybridSearchRequest;
+import com.jdh.rag.domain.ProcessedQuery;
 import com.jdh.rag.domain.RagAnswerResponse;
 import com.jdh.rag.domain.SearchHit;
 import com.jdh.rag.exception.LlmException;
 import com.jdh.rag.exception.common.enums.RagExceptionEnum;
 import com.jdh.rag.port.InputGuardrailPort;
 import com.jdh.rag.port.OutputGuardrailPort;
+import com.jdh.rag.port.QueryPreprocessPort;
 import com.jdh.rag.support.ContextBuilder;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -22,11 +24,12 @@ import java.util.UUID;
 /**
  * RAG 답변 생성 파이프라인:
  * 1) 입력 가드레일  (프롬프트 인젝션·범위 외 질의 차단)
- * 2) 하이브리드 검색 (BM25 + Vector + RRF + Rerank)
- * 3) 컨텍스트 구성  (dedup / trim / citation keys / 프롬프트 인젝션 방어)
- * 4) ChatClient 호출 (OpenAI 등)
- * 5) 출력 가드레일  (환각 감지, 문서 미근거 답변 차단/경고)
- * 6) 출처(citations) 포함 응답 반환
+ * 2) 쿼리 전처리   (BM25용 keywordQuery + Vector용 vectorQuery 생성)
+ * 3) 하이브리드 검색 (BM25 + Vector + RRF + Rerank)
+ * 4) 컨텍스트 구성  (dedup / trim / citation keys / 프롬프트 인젝션 방어)
+ * 5) ChatClient 호출 (OpenAI 등)
+ * 6) 출력 가드레일  (환각 감지, 문서 미근거 답변 차단/경고)
+ * 7) 출처(citations) 포함 응답 반환
  */
 @Slf4j
 @Service
@@ -39,6 +42,7 @@ public class RagAnswerService {
     private final RagProperties       ragProperties;
     private final InputGuardrailPort  inputGuardrailPort;
     private final OutputGuardrailPort outputGuardrailPort;
+    private final QueryPreprocessPort queryPreprocessPort;
 
     private static final String SYSTEM_PROMPT = """
             당신은 사내 지식 기반 QA 어시스턴트입니다.
@@ -77,9 +81,16 @@ public class RagAnswerService {
             log.warn("[{}] 입력 가드레일 경고: {}", requestId, inputCheck.reason());
         }
 
-        // 2) 하이브리드 검색
+        // 2) 쿼리 전처리: BM25용 keywordQuery + Vector용 vectorQuery 생성
+        ProcessedQuery processed = queryPreprocessPort.preprocess(query);
+        log.debug("[{}] 쿼리 전처리 완료: keyword={}, vectorLen={}",
+                requestId, processed.keywordQuery(), processed.vectorQuery().length());
+
+        // 3) 하이브리드 검색
         HybridSearchRequest searchReq = HybridSearchRequest.builder()
                 .query(query)
+                .keywordQuery(processed.keywordQuery())
+                .vectorQuery(processed.vectorQuery())
                 .topNKeyword(ragProperties.topNKeyword())
                 .topNVector(ragProperties.topNVector())
                 .topKFinal(ragProperties.topKFinal())
@@ -89,20 +100,20 @@ public class RagAnswerService {
                 .build();
         List<SearchHit> ranked = hybridSearchService.search(searchReq, requestId);
 
-        // 3) 문서가 없을 때 fallback (출력 가드레일 미적용 — 비교할 컨텍스트 없음)
+        // 4) 문서가 없을 때 fallback (출력 가드레일 미적용 — 비교할 컨텍스트 없음)
         if (ranked.isEmpty()) {
             log.warn("[{}] 검색 결과 없음 → 일반 LLM 답변", requestId);
             return answerWithoutContext(requestId, query);
         }
 
-        // 4) 컨텍스트 구성
+        // 5) 컨텍스트 구성
         ContextBuilder.BuiltContext built = contextBuilder.build(
                 ranked,
                 ragProperties.topKFinal(),
                 ragProperties.maxCharsPerChunk()
         );
 
-        // 5) LLM 호출
+        // 6) LLM 호출
         String userPrompt = """
                 질문: %s
 
@@ -127,7 +138,7 @@ public class RagAnswerService {
             throw new LlmException(RagExceptionEnum.LLM_CALL_FAILED, e);
         }
 
-        // 6) 출력 가드레일: LLM 답변이 문서에 근거하는지 검사
+        // 7) 출력 가드레일: LLM 답변이 문서에 근거하는지 검사
         GuardrailResult outputCheck = outputGuardrailPort.check(answer, built.contextText());
         if (outputCheck.isBlocked()) {
             log.warn("[{}] 출력 가드레일 차단: {}", requestId, outputCheck.reason());

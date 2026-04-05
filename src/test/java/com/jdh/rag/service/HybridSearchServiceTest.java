@@ -44,9 +44,9 @@ class HybridSearchServiceTest {
     }
 
     @Test
-    @DisplayName("keyword와 vector 검색을 각각 호출한다")
-    void keyword와_vector_검색을_각각_호출한다() {
-        HybridSearchRequest req = req("세금 계산", 10, 10, 5, 0.6);
+    @DisplayName("keyword와 vector 검색을 각각 전처리된 쿼리로 호출한다")
+    void keyword와_vector_검색을_각각_전처리된_쿼리로_호출한다() {
+        HybridSearchRequest req = req("세금 계산 어떻게 해요", "세금 계산", "부가세 계산은 과세표준에 10%를 곱한다.", 10, 10, 5, 0.6);
         when(keywordSearchPort.search(any(), anyInt(), any())).thenReturn(List.of());
         when(vectorSearchPort.search(any(), anyInt(), any(), any())).thenReturn(List.of());
         when(rerankPort.rerank(any(), any(), anyInt(), anyBoolean())).thenReturn(List.of());
@@ -54,13 +54,13 @@ class HybridSearchServiceTest {
         service.search(req, "req-001");
 
         verify(keywordSearchPort, times(1)).search(eq("세금 계산"), eq(10), any());
-        verify(vectorSearchPort, times(1)).search(eq("세금 계산"), eq(10), eq(0.6), any());
+        verify(vectorSearchPort, times(1)).search(eq("부가세 계산은 과세표준에 10%를 곱한다."), eq(10), eq(0.6), any());
     }
 
     @Test
-    @DisplayName("RRF 결합 후 rerankPort를 호출한다")
-    void RRF_결합_후_rerankPort를_호출한다() {
-        HybridSearchRequest req = req("질의", 10, 10, 3, 0.6);
+    @DisplayName("RRF 결합 후 rerankPort를 원문 쿼리로 호출한다")
+    void RRF_결합_후_rerankPort를_원문_쿼리로_호출한다() {
+        HybridSearchRequest req = req("질의 원문", "질의", "가상 답변", 10, 10, 3, 0.6);
         when(keywordSearchPort.search(any(), anyInt(), any()))
                 .thenReturn(List.of(hit("A"), hit("B")));
         when(vectorSearchPort.search(any(), anyInt(), any(), any()))
@@ -71,27 +71,28 @@ class HybridSearchServiceTest {
 
         List<SearchHit> result = service.search(req, "req-002");
 
-        verify(rerankPort, times(1)).rerank(eq("질의"), any(), eq(3), anyBoolean());
+        // 리랭크에는 원문 쿼리가 전달된다
+        verify(rerankPort, times(1)).rerank(eq("질의 원문"), any(), eq(3), anyBoolean());
         assertThat(result).hasSize(3);
     }
 
     @Test
-    @DisplayName("검색 로그를 적재한다")
-    void 검색_로그를_적재한다() {
-        HybridSearchRequest req = req("로그 테스트", 5, 5, 2, 0.6);
+    @DisplayName("검색 로그에는 원문 쿼리가 적재된다")
+    void 검색_로그에는_원문_쿼리가_적재된다() {
+        HybridSearchRequest req = req("로그 테스트 원문", "로그 핵심어", "가상 답변", 5, 5, 2, 0.6);
         when(keywordSearchPort.search(any(), anyInt(), any())).thenReturn(List.of(hit("X")));
         when(vectorSearchPort.search(any(), anyInt(), any(), any())).thenReturn(List.of());
         when(rerankPort.rerank(any(), any(), anyInt(), anyBoolean())).thenReturn(List.of(hit("X")));
 
         service.search(req, "req-003");
 
-        verify(searchLogger, times(1)).logBatch(eq("req-003"), eq("로그 테스트"), any(), any());
+        verify(searchLogger, times(1)).logBatch(eq("req-003"), eq("로그 테스트 원문"), any(), any());
     }
 
     @Test
     @DisplayName("keyword 검색 실패 시 vector 결과만으로 degrade된다")
     void keyword_검색_실패시_vector_결과만으로_degrade된다() {
-        HybridSearchRequest req = req("질의", 5, 5, 3, 0.6);
+        HybridSearchRequest req = req("질의", "질의 키워드", "가상 답변", 5, 5, 3, 0.6);
         when(keywordSearchPort.search(any(), anyInt(), any()))
                 .thenThrow(new RuntimeException("ES 연결 실패"));
         when(vectorSearchPort.search(any(), anyInt(), any(), any()))
@@ -108,7 +109,7 @@ class HybridSearchServiceTest {
     @Test
     @DisplayName("vector 검색 실패 시 keyword 결과만으로 degrade된다")
     void vector_검색_실패시_keyword_결과만으로_degrade된다() {
-        HybridSearchRequest req = req("질의", 5, 5, 3, 0.6);
+        HybridSearchRequest req = req("질의", "질의 키워드", "가상 답변", 5, 5, 3, 0.6);
         when(keywordSearchPort.search(any(), anyInt(), any()))
                 .thenReturn(List.of(hit("K1"), hit("K2")));
         when(vectorSearchPort.search(any(), anyInt(), any(), any()))
@@ -124,7 +125,7 @@ class HybridSearchServiceTest {
     @Test
     @DisplayName("검색 결과 없으면 빈 목록 반환")
     void 검색_결과_없으면_빈_목록_반환() {
-        HybridSearchRequest req = req("없는 질의", 5, 5, 3, 0.6);
+        HybridSearchRequest req = req("없는 질의", "없는 키워드", "가상 답변", 5, 5, 3, 0.6);
         when(keywordSearchPort.search(any(), anyInt(), any())).thenReturn(List.of());
         when(vectorSearchPort.search(any(), anyInt(), any(), any())).thenReturn(List.of());
         when(rerankPort.rerank(any(), any(), anyInt(), anyBoolean())).thenReturn(List.of());
@@ -139,7 +140,8 @@ class HybridSearchServiceTest {
     void 필터가_각_port에_전달된다() {
         Map<String, Object> filters = Map.of("tenantId", "tenant-A", "domain", "tax");
         HybridSearchRequest req = HybridSearchRequest.builder()
-                .query("질의").topNKeyword(5).topNVector(5)
+                .query("질의").keywordQuery("질의 키워드").vectorQuery("가상 답변")
+                .topNKeyword(5).topNVector(5)
                 .topKFinal(3).vectorThreshold(0.6)
                 .filters(filters)
                 .build();
@@ -154,9 +156,12 @@ class HybridSearchServiceTest {
         verify(vectorSearchPort).search(any(), anyInt(), any(), eq(filters));
     }
 
-    private HybridSearchRequest req(String query, int topNK, int topNV, int topK, double threshold) {
+    private HybridSearchRequest req(String query, String keywordQuery, String vectorQuery,
+                                     int topNK, int topNV, int topK, double threshold) {
         return HybridSearchRequest.builder()
                 .query(query)
+                .keywordQuery(keywordQuery)
+                .vectorQuery(vectorQuery)
                 .topNKeyword(topNK).topNVector(topNV)
                 .topKFinal(topK)
                 .vectorThreshold(threshold)

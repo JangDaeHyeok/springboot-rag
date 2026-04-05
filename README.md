@@ -46,10 +46,11 @@ config/       ← Spring 설정
 HTTP 요청
   └─ RagAnswerService
        ├─ 1) InputGuardrailPort   ← 프롬프트 인젝션 차단
-       ├─ 2) HybridSearchService  ← BM25 + Vector + RRF + Rerank
-       ├─ 3) ContextBuilder       ← dedup / trim / sanitize
-       ├─ 4) ChatClient           ← OpenAI gpt-4o-mini 호출
-       └─ 5) OutputGuardrailPort  ← 환각 감지 / 근거 검증
+       ├─ 2) QueryPreprocessPort  ← keywordQuery(BM25) + vectorQuery(HyDE) 생성
+       ├─ 3) HybridSearchService  ← BM25(keywordQuery) + Vector(vectorQuery) + RRF + Rerank
+       ├─ 4) ContextBuilder       ← dedup / trim / sanitize
+       ├─ 5) ChatClient           ← OpenAI gpt-4o-mini 호출
+       └─ 6) OutputGuardrailPort  ← 환각 감지 / 근거 검증
 ```
 
 ---
@@ -171,6 +172,17 @@ Content-Type: application/json
 | `fixed` | 고정 토큰 크기(`rag.chunk.size`)로 분리 |
 
 > **비용 주의**: `rag.chunk.strategy=semantic`이면 수집 요청당 최대 LLM 호출 1회 추가 발생.
+
+#### 쿼리 전처리
+
+답변 요청마다 `LlmQueryPreprocessAdapter`가 자동으로 동작하며 LLM 호출 1회가 추가된다.
+
+| 출력 | 설명 | 사용 채널 |
+|---|---|---|
+| `keywordQuery` | 구어체·조사를 제거한 핵심 명사·동사 중심 쿼리 | BM25 검색 |
+| `vectorQuery` | 질문의 이상적 답변을 서술한 가상 문서 (HyDE 기법) | Vector 검색 |
+
+LLM 호출 실패 또는 파싱 실패 시 원문 쿼리를 그대로 사용하므로(fail-open) 메인 파이프라인은 차단되지 않는다.
 
 > **임베딩 모델 전환 시 주의**: `rag.embedding.type` 변경 시 벡터 공간이 달라지므로 `vector_store` 테이블 DROP 후 문서 전체 재수집 필요.
 

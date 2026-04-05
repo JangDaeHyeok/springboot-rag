@@ -51,6 +51,7 @@ config/              ← Spring 설정
 
 | 포트 | 역할 | 구현체 (교체 조건) |
 |---|---|---|
+| `QueryPreprocessPort` | 쿼리 전처리 (BM25·Vector 채널별 최적화) | `LlmQueryPreprocessAdapter` (항상 활성, 조건 없음) |
 | `KeywordSearchPort` | BM25 키워드 검색 | `PgKeywordSearchAdapter` / `InMemoryKeywordSearchAdapter` (`rag.keyword-search-type`) |
 | `KeywordIndexPort` | 문서 BM25 색인 | 동일 어댑터가 구현 |
 | `VectorSearchPort` | Cosine 벡터 검색 | `SpringAiVectorSearchAdapter` |
@@ -199,6 +200,7 @@ LLM 답변 생성 **후** 사용자에게 반환하기 전 검사:
 - **검색 결과 크기를 제한한다**: `topNKeyword`, `topNVector`, `topKFinal`을 통해 반드시 LIMIT를 걸고 결과를 처리한다.
 - **Tika 파싱은 리소스를 닫는다**: `TikaDocumentReader`는 내부적으로 InputStream을 사용하므로 예외 발생 시 리소스 누수에 주의한다.
 - **가드레일 비용 인식**: `rag.guardrail.enabled=true`이면 요청당 최대 LLM 호출 2회 추가 발생. 고트래픽 환경에서는 비동기 처리 또는 캐싱 검토.
+- **쿼리 전처리 비용 인식**: `LlmQueryPreprocessAdapter`가 항상 활성화되어 요청당 LLM 호출 1회 추가 발생. 전처리 실패 시 원문 쿼리를 그대로 사용(fail-open)하므로 메인 파이프라인은 차단되지 않는다.
 
 ### 일반 품질
 
@@ -282,14 +284,16 @@ export DB_PASSWORD=ragpass                                        # DB 패스워
 RagController
   └─ RagAnswerService.answer()
        ├─ 1) InputGuardrailPort.check(query)         ← BLOCK이면 즉시 반환
-       ├─ 2) HybridSearchService.search()
-       │    ├─ KeywordSearchPort  (BM25 via pg_search)
-       │    ├─ VectorSearchPort   (Cosine via PGVector)
-       │    ├─ RrfRankFusion      (Reciprocal Rank Fusion)
-       │    └─ RerankPort         (score 순 또는 날짜 순)
-       ├─ 3) ContextBuilder.build() (dedup / trim / sanitize)
-       ├─ 4) ChatClient.prompt()   (OpenAI gpt-4o-mini 호출)
-       └─ 5) OutputGuardrailPort.check(answer, context) ← BLOCK/WARN 처리
+       ├─ 2) QueryPreprocessPort.preprocess(query)   ← keywordQuery + vectorQuery 생성
+       │    └─ LlmQueryPreprocessAdapter (fail-open: 실패 시 원문 그대로)
+       ├─ 3) HybridSearchService.search()
+       │    ├─ KeywordSearchPort  (keywordQuery로 BM25 검색)
+       │    ├─ VectorSearchPort   (vectorQuery로 Cosine 검색, HyDE)
+       │    ├─ RrfRankFusion      (Reciprocal Rank Fusion, 원문 query 유지)
+       │    └─ RerankPort         (score 순 또는 날짜 순, 원문 query 사용)
+       ├─ 4) ContextBuilder.build() (dedup / trim / sanitize)
+       ├─ 5) ChatClient.prompt()   (OpenAI gpt-4o-mini 호출)
+       └─ 6) OutputGuardrailPort.check(answer, context) ← BLOCK/WARN 처리
 ```
 
 ### 문서 수집 파이프라인 흐름
