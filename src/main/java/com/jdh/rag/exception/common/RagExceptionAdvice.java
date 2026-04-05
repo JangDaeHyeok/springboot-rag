@@ -1,6 +1,5 @@
 package com.jdh.rag.exception.common;
 
-import com.jdh.rag.adapter.DouzoneEmbeddingModel;
 import com.jdh.rag.exception.IngestionException;
 import com.jdh.rag.exception.LlmException;
 import com.jdh.rag.exception.SearchException;
@@ -21,9 +20,9 @@ import org.springframework.web.servlet.NoHandlerFoundException;
  *
  * <p>우선순위 (위에서 아래로 — 더 구체적인 타입이 먼저):
  * <ol>
- *   <li>서비스별 예외: {@link IngestionException}, {@link SearchException}, {@link LlmException}</li>
+ *   <li>서비스별 예외: {@link IngestionException}, {@link SearchException}, {@link LlmException}
+ *       (DouzoneEmbeddingException 포함 — LlmException 상속)</li>
  *   <li>공통 기반: {@link RagException}</li>
- *   <li>Douzone 임베딩: {@link DouzoneEmbeddingModel.DouzoneEmbeddingException}</li>
  *   <li>Spring MVC 표준: {@link NoHandlerFoundException}, {@link HttpRequestMethodNotSupportedException} 등</li>
  *   <li>Multipart 파일 업로드: {@link MaxUploadSizeExceededException}, {@link MultipartException}</li>
  *   <li>폴백: {@link RuntimeException}, {@link Exception}</li>
@@ -67,15 +66,6 @@ public class RagExceptionAdvice {
         log.warn("[RagException] uri={}, code={}, msg={}",
                 req.getRequestURI(), e.getExceptionEnum().getCode(), e.getMessage());
         return buildResponse(e.getExceptionEnum(), e.getMessage());
-    }
-
-    // ── Douzone 임베딩 예외 ────────────────────────────────────────────────────
-
-    @ExceptionHandler(DouzoneEmbeddingModel.DouzoneEmbeddingException.class)
-    public ResponseEntity<RagExceptionEntity> handleEmbeddingException(
-            HttpServletRequest req, DouzoneEmbeddingModel.DouzoneEmbeddingException e) {
-        log.error("[DouzoneEmbeddingException] uri={}, msg={}", req.getRequestURI(), e.getMessage());
-        return buildResponse(RagExceptionEnum.EMBEDDING_FAILED, RagExceptionEnum.EMBEDDING_FAILED.getMessage());
     }
 
     // ── Spring MVC 표준 예외 ───────────────────────────────────────────────────

@@ -81,11 +81,11 @@ docker compose up -d
 export OPENAI_API_KEY=sk-...
 export DOUZONE_EMBEDDING_URL=https://...
 
-# 3. 애플리케이션 실행
-./gradlew bootRun
+# 3. 로컬 프로파일로 실행 (in-memory, 가드레일/전처리 비활성화, 스키마 자동 초기화)
+./gradlew bootRun --args='--spring.profiles.active=local'
 
-# DB 없이 빠르게 테스트 (in-memory 모드)
-./gradlew bootRun --args='--rag.keyword-search-type=memory --rag.guardrail.enabled=false'
+# 운영 설정 그대로 실행 (DB, 가드레일, LLM 전처리 모두 활성화)
+./gradlew bootRun
 ```
 
 ### 테스트 실행
@@ -159,6 +159,7 @@ Content-Type: application/json
 | `rag.embedding.type` | `douzone` | 임베딩 모델 선택 (`douzone` \| `openai`) |
 | `rag.keyword-search-type` | `postgres` | 키워드 검색 어댑터 (`postgres` \| `memory`) |
 | `rag.guardrail.enabled` | `true` | 소프트 가드레일 활성화 여부 |
+| `rag.query-preprocess.enabled` | `true` | 쿼리 전처리 활성화 여부 (`false`이면 원문 그대로 사용) |
 | `rag.top-k-final` | `5` | 최종 검색 결과 수 |
 | `rag.vector-threshold` | `0.6` | 벡터 유사도 하한선 |
 | `rag.chunk.size` | `600` | 고정 청킹 크기 (토큰 수) |
@@ -175,7 +176,8 @@ Content-Type: application/json
 
 #### 쿼리 전처리
 
-답변 요청마다 `LlmQueryPreprocessAdapter`가 자동으로 동작하며 LLM 호출 1회가 추가된다.
+`rag.query-preprocess.enabled=true`(기본값)이면 `LlmQueryPreprocessAdapter`가 동작하며 LLM 호출 1회가 추가된다.
+`false`로 설정하면 `NoOpQueryPreprocessAdapter`가 활성화되어 원문 쿼리를 그대로 사용한다 (로컬 개발용).
 
 | 출력 | 설명 | 사용 채널 |
 |---|---|---|

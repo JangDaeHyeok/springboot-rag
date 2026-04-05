@@ -3,6 +3,8 @@ package com.jdh.rag.adapter;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 import com.jdh.rag.config.DouzoneEmbeddingProperties;
+import com.jdh.rag.exception.LlmException;
+import com.jdh.rag.exception.common.enums.RagExceptionEnum;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.embedding.Embedding;
 import org.springframework.ai.embedding.EmbeddingModel;
@@ -175,8 +177,17 @@ public class DouzoneEmbeddingModel implements EmbeddingModel {
 
     // ── 커스텀 예외 ─────────────────────────────────────────────────────────────
 
-    public static class DouzoneEmbeddingException extends RuntimeException {
-        public DouzoneEmbeddingException(String message) { super(message); }
-        public DouzoneEmbeddingException(String message, Throwable cause) { super(message, cause); }
+    /**
+     * Douzone 임베딩 API 전용 예외.
+     * {@link LlmException}을 상속하므로 {@link com.jdh.rag.exception.common.RagExceptionAdvice}의
+     * LlmException 핸들러에서 EMBEDDING_FAILED(L0002, 503)로 처리된다.
+     */
+    public static class DouzoneEmbeddingException extends LlmException {
+        public DouzoneEmbeddingException(String message) {
+            super(RagExceptionEnum.EMBEDDING_FAILED, message);
+        }
+        public DouzoneEmbeddingException(String message, Throwable cause) {
+            super(RagExceptionEnum.EMBEDDING_FAILED, message, cause);
+        }
     }
 }

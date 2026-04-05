@@ -11,7 +11,6 @@ import org.springframework.stereotype.Component;
 
 import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 /**
  * Spring AI VectorStore 기반 벡터 검색 어댑터.
@@ -44,7 +43,7 @@ public class SpringAiVectorSearchAdapter implements VectorSearchPort {
         return docs.stream()
                 .filter(d -> matchesFilters(d.getMetadata(), filters))
                 .map(this::toSearchHit)
-                .collect(Collectors.toList());
+                .toList();
     }
 
     private SearchHit toSearchHit(Document doc) {

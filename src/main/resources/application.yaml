@@ -20,9 +20,11 @@ spring:
 
   # ── DB 스키마 초기화 (rag_chunks, search_logs) ─────────────────────────────
   # vector_store 는 Spring AI PGVector 가 자동 생성
+  # 운영 환경: never (DDL 변경은 DBA 승인 후 별도 적용)
+  # 로컬 개발: application-local.yaml 또는 --spring.profiles.active=local 에서 always로 오버라이드
   sql:
     init:
-      mode: always
+      mode: never
       schema-locations: classpath:db/schema.sql
 
   # ── OpenAI ────────────────────────────────────────────────────────────────

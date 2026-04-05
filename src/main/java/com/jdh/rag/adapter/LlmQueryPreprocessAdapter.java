@@ -6,6 +6,7 @@ import com.jdh.rag.support.prompt.QueryPreprocessPrompts;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -28,6 +29,7 @@ import tools.jackson.databind.ObjectMapper;
 @Slf4j
 @Component
 @RequiredArgsConstructor
+@ConditionalOnProperty(name = "rag.query-preprocess.enabled", havingValue = "true", matchIfMissing = true)
 public class LlmQueryPreprocessAdapter implements QueryPreprocessPort {
 
     private final ChatClient            chatClient;
@@ -44,7 +46,7 @@ public class LlmQueryPreprocessAdapter implements QueryPreprocessPort {
                     .content();
             return parseResponse(response, query);
         } catch (Exception e) {
-            log.warn("쿼리 전처리 LLM 호출 실패 (원문 사용): query={}, error={}", query, e.getMessage());
+            log.warn("쿼리 전처리 LLM 호출 실패 (원문 사용): error={}", e.getMessage());
             return fallback(query);
         }
     }
@@ -67,8 +69,8 @@ public class LlmQueryPreprocessAdapter implements QueryPreprocessPort {
             return new ProcessedQuery(keywordQuery, vectorQuery);
 
         } catch (Exception e) {
-            log.warn("쿼리 전처리 응답 파싱 실패 (원문 사용): response={}, error={}",
-                    responseText, e.getMessage());
+            log.warn("쿼리 전처리 응답 파싱 실패 (원문 사용): responseLen={}, error={}",
+                    responseText != null ? responseText.length() : 0, e.getMessage());
             return fallback(originalQuery);
         }
     }

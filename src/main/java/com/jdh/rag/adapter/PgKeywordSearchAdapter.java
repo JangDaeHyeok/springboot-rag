@@ -7,6 +7,7 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
+import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.ObjectMapper;
 
 import java.time.Instant;
@@ -77,11 +78,12 @@ public class PgKeywordSearchAdapter implements KeywordSearchPort, KeywordIndexPo
                 .build();
     }
 
-    @SuppressWarnings("unchecked")
+    private static final TypeReference<Map<String, Object>> META_TYPE = new TypeReference<>() {};
+
     private Map<String, Object> parseMeta(String json) {
         if (json == null || json.isBlank()) return Map.of();
         try {
-            return objectMapper.readValue(json, Map.class);
+            return objectMapper.readValue(json, META_TYPE);
         } catch (Exception e) {
             log.warn("metadata JSON 파싱 실패: {}", e.getMessage());
             return Map.of();

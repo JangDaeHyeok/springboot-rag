@@ -118,8 +118,8 @@ public class OpenAiGuardrailAdapter implements InputGuardrailPort, OutputGuardra
                 default      -> GuardrailResult.pass();
             };
         } catch (Exception e) {
-            log.warn("가드레일 응답 파싱 실패 (fail-open): response={}, error={}",
-                    responseText, e.getMessage());
+            log.warn("가드레일 응답 파싱 실패 (fail-open): responseLen={}, error={}",
+                    responseText != null ? responseText.length() : 0, e.getMessage());
             return GuardrailResult.pass();
         }
     }

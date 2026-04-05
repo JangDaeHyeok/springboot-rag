@@ -1,6 +1,7 @@
 package com.jdh.rag.exception;
 
 import com.jdh.rag.adapter.DouzoneEmbeddingModel;
+import com.jdh.rag.exception.LlmException;
 import com.jdh.rag.exception.common.RagException;
 import com.jdh.rag.exception.common.RagExceptionAdvice;
 import com.jdh.rag.exception.common.RagExceptionEntity;
@@ -138,13 +139,19 @@ class RagExceptionAdviceTest {
     }
 
     // ── DouzoneEmbeddingException ─────────────────────────────────────────────
+    // DouzoneEmbeddingException은 LlmException을 상속하므로 handleLlmException에서 처리된다.
 
     @Test
-    @DisplayName("DouzoneEmbeddingException → 503 + L0002")
+    @DisplayName("DouzoneEmbeddingException → LlmException 핸들러 → 503 + L0002")
     void douzoneEmbedding_503_L0002() {
         DouzoneEmbeddingModel.DouzoneEmbeddingException e =
                 new DouzoneEmbeddingModel.DouzoneEmbeddingException("Douzone 임베딩 API 오류: HTTP 500");
-        ResponseEntity<RagExceptionEntity> res = advice.handleEmbeddingException(req, e);
+
+        // DouzoneEmbeddingException은 LlmException 하위 타입
+        assertThat(e).isInstanceOf(LlmException.class);
+        assertThat(e.getExceptionEnum()).isEqualTo(RagExceptionEnum.EMBEDDING_FAILED);
+
+        ResponseEntity<RagExceptionEntity> res = advice.handleLlmException(req, e);
 
         assertThat(res.getStatusCode()).isEqualTo(HttpStatus.SERVICE_UNAVAILABLE);
         assertThat(res.getBody().errorCode()).isEqualTo("L0002");

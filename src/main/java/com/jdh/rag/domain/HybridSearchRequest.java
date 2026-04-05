@@ -3,6 +3,7 @@ package com.jdh.rag.domain;
 import lombok.Builder;
 
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * 하이브리드 검색 요청.
@@ -22,4 +23,10 @@ public record HybridSearchRequest(
         Double vectorThreshold,
         Map<String, Object> filters,
         boolean sortByLatest   // true면 RRF 이후 createdAt 내림차순 재정렬
-) {}
+) {
+    public HybridSearchRequest {
+        Objects.requireNonNull(query,        "query는 필수입니다.");
+        Objects.requireNonNull(keywordQuery, "keywordQuery는 필수입니다.");
+        Objects.requireNonNull(vectorQuery,  "vectorQuery는 필수입니다.");
+    }
+}
