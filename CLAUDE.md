@@ -204,7 +204,7 @@ LLM 답변 생성 **후** 사용자에게 반환하기 전 검사:
 
 ### 일반 품질
 
-- **디버그용 `System.out.println`은 절대 커밋하지 않는다**: 로깅은 SLF4J(`log.info/info/warn/error`)를 사용한다.
+- **디버그용 `System.out.println`은 절대 커밋하지 않는다**: 로깅은 SLF4J(`log.debug/info/warn/error`)를 사용한다.
 - **로그 레벨 기준**:
   - `debug`: 내부 흐름, 건수 확인
   - `info`: 주요 파이프라인 완료 (수집 완료, 답변 생성 완료)
