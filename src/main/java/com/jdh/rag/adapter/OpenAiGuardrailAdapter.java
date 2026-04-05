@@ -13,22 +13,11 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * OpenAI ChatClient 기반 소프트 가드레일 어댑터.
+ * LLM 기반 소프트 가드레일 어댑터. rag.guardrail.enabled=true 시 활성화.
  *
- * <p>{@code rag.guardrail.enabled=true} 일 때 활성화된다.
- *
- * <p><b>입력 가드레일 ({@link #check(String)})</b>:
- * 사용자 질의에서 프롬프트 인젝션·악의적 요청·범위 외 질문을 감지한다.
- *
- * <p><b>출력 가드레일 ({@link #check(String, String)})</b>:
- * LLM 답변이 참고 문서에 충분히 근거하는지 확인한다.
- * 문서에 없는 내용을 사실처럼 단언하거나(hallucination) 내용을 왜곡하면 WARN/BLOCK을 반환한다.
- *
- * <p><b>Fail-open 정책</b>: 가드레일 판단 중 오류가 발생하면 PASS로 처리한다.
- * 가드레일이 메인 파이프라인을 차단하지 않도록 설계되었다.
- *
- * <p><b>비용 주의</b>: 요청당 최대 2번의 추가 LLM 호출이 발생한다.
- * 고트래픽 환경에서는 캐싱 또는 비동기 처리를 검토한다.
+ * 입력: 프롬프트 인젝션·유해 요청 감지 (PASS/WARN/BLOCK).
+ * 출력: 답변이 문서에 근거하는지 검증 (환각 감지).
+ * Fail-open: LLM 오류 시 PASS 처리. 요청당 최대 LLM 2회 추가.
  */
 @Slf4j
 @Component
@@ -42,14 +31,7 @@ public class OpenAiGuardrailAdapter implements InputGuardrailPort, OutputGuardra
 
     // ── InputGuardrailPort ────────────────────────────────────────────────────
 
-    /**
-     * 사용자 질의 검사.
-     * <ul>
-     *   <li>BLOCK: 프롬프트 인젝션, 역할 변경 시도, 개인정보 탈취, 유해 콘텐츠 요청</li>
-     *   <li>WARN:  업무 범위 외 질문</li>
-     *   <li>PASS:  정상적인 업무·지식 관련 질문</li>
-     * </ul>
-     */
+    /** 입력 가드레일: 프롬프트 인젝션·유해 요청 → BLOCK, 범위 외 → WARN, 정상 → PASS */
     @Override
     public GuardrailResult check(String query) {
         return callAndParse(
@@ -61,14 +43,7 @@ public class OpenAiGuardrailAdapter implements InputGuardrailPort, OutputGuardra
 
     // ── OutputGuardrailPort ───────────────────────────────────────────────────
 
-    /**
-     * 생성된 답변의 문서 근거 검사.
-     * <ul>
-     *   <li>BLOCK: 문서에 없는 내용을 단언하거나 내용을 심각하게 왜곡</li>
-     *   <li>WARN:  문서 근거가 불충분하거나 불확실한 내용 포함</li>
-     *   <li>PASS:  답변이 문서에 충분히 근거하거나 불확실성을 적절히 표시</li>
-     * </ul>
-     */
+    /** 출력 가드레일: 문서 없는 내용 단언(환각) → BLOCK, 근거 부족 → WARN, 근거 충분 → PASS */
     @Override
     public GuardrailResult check(String answer, String contextText) {
         return callAndParse(
@@ -98,10 +73,7 @@ public class OpenAiGuardrailAdapter implements InputGuardrailPort, OutputGuardra
         return parseResponse(responseText, warnMessage, blockMessage);
     }
 
-    /**
-     * LLM 응답 JSON을 {@link GuardrailResult}로 변환한다.
-     * 파싱 실패 시 fail-open(PASS)으로 처리한다.
-     */
+    /** LLM 응답 JSON → GuardrailResult 변환. 파싱 실패 시 fail-open(PASS). */
     GuardrailResult parseResponse(String responseText,
                                    String warnMessage,
                                    String blockMessage) {
@@ -124,9 +96,6 @@ public class OpenAiGuardrailAdapter implements InputGuardrailPort, OutputGuardra
         }
     }
 
-    /**
-     * 마크다운 코드블록(```json ... ```)으로 감싸진 경우를 처리한다.
-     */
     private String extractJson(String text) {
         if (text == null) return "{}";
         text = text.strip();

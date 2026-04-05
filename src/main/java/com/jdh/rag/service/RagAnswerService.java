@@ -25,12 +25,11 @@ import java.util.UUID;
 /**
  * RAG 답변 생성 파이프라인:
  * 1) 입력 가드레일  (프롬프트 인젝션·범위 외 질의 차단)
- * 2) 쿼리 전처리   (BM25용 keywordQuery + Vector용 vectorQuery 생성)
+ * 2) 쿼리 전처리   (keywordQuery + vectorQuery 생성)
  * 3) 하이브리드 검색 (BM25 + Vector + RRF + Rerank)
- * 4) 컨텍스트 구성  (dedup / trim / citation keys / 프롬프트 인젝션 방어)
- * 5) ChatClient 호출 (OpenAI 등)
- * 6) 출력 가드레일  (환각 감지, 문서 미근거 답변 차단/경고)
- * 7) 출처(citations) 포함 응답 반환
+ * 4) 컨텍스트 구성  (dedup / trim / sanitize)
+ * 5) ChatClient 호출
+ * 6) 출력 가드레일  (환각 감지, 근거 검증)
  */
 @Slf4j
 @Service

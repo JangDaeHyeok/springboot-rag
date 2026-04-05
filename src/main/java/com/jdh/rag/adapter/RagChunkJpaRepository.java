@@ -7,27 +7,13 @@ import org.springframework.data.repository.query.Param;
 import java.util.List;
 
 /**
- * rag_chunks 테이블 레포지토리.
- *
- * <p>키워드 검색은 pg_search(ParadeDB) BM25 인덱스를 네이티브 쿼리로 사용한다.
- * <ul>
- *   <li>{@code @@@} 연산자: BM25 인덱스 검색</li>
- *   <li>{@code paradedb.match(field, query)}: 지정 필드 매칭 쿼리 생성</li>
- *   <li>{@code paradedb.score(key_field)}: BM25 관련도 점수 반환</li>
- * </ul>
- * 동적 필터(tenantId, domain)는 {@code (:param IS NULL OR col = :param)} 패턴으로 처리한다.
+ * rag_chunks 테이블 레포지토리. pg_search(ParadeDB) BM25 검색에 네이티브 쿼리 사용.
+ * {@code @@@}: BM25 검색 연산자 / {@code paradedb.match}: 쿼리 생성 / {@code paradedb.score}: BM25 점수.
+ * 동적 필터는 {@code :param IS NULL OR col = :param} 패턴.
  */
 public interface RagChunkJpaRepository extends JpaRepository<RagChunkEntity, String> {
 
-    /**
-     * pg_search BM25 검색 + 메타데이터 필터.
-     *
-     * @param query    검색 쿼리 문자열 (paradedb.match 로 변환)
-     * @param tenantId 테넌트 필터 (null 이면 전체)
-     * @param domain   도메인 필터 (null 이면 전체)
-     * @param topN     반환 최대 건수
-     * @return [chunk_id, doc_id, content, metadata(jsonb→text), bm25_score] 배열 목록
-     */
+    /** BM25 검색. 반환: [chunk_id, doc_id, content, metadata(jsonb→text), bm25_score] */
     @Query(value = """
             SELECT
                 r.chunk_id,

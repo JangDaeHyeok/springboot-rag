@@ -22,23 +22,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Douzone 사내 임베딩 API 어댑터.
+ * Douzone 사내 임베딩 API 어댑터. rag.embedding.type=douzone 시 활성화.
  *
- * <pre>
- * POST https://private-ai.douzone.com/ailab-embedding-8
- * Content-Type: application/json
- * { "input": "텍스트" }
- * </pre>
- *
- * rag.embedding.type=douzone 로 설정하면 OpenAI EmbeddingModel 대신 이 빈이 사용된다.
- *
- * 응답 포맷 자동 감지 (rag.embedding.douzone.response-field 로 고정도 가능):
- *   1. { "embedding": [...] }
- *   2. { "vector": [...] }      ← response-field 변경 시
- *   3. [...]                    ← response-field="" 로 설정 시
- *   4. { "data": [{"embedding": [...]}] }  ← OpenAI 호환 포맷
- *
- * 주의: 단건(single) API라서 배치 임베딩 시 텍스트 수만큼 API를 순차 호출한다.
+ * 응답 포맷 자동 감지: embedding 필드 → vector 필드 → 직접 배열 → OpenAI 호환(data[0].embedding).
+ * response-field 설정으로 우선 필드 고정 가능. 단건 API이므로 배치 수집 시 순차 호출.
  */
 @Slf4j
 @Primary
@@ -63,10 +50,6 @@ public class DouzoneEmbeddingModel implements EmbeddingModel {
 
     // ── EmbeddingModel 구현 ────────────────────────────────────────────────────
 
-    /**
-     * 배치 임베딩 요청.
-     * 내부적으로 각 텍스트를 단건 API 호출로 처리한다.
-     */
     @Override
     public EmbeddingResponse call(EmbeddingRequest request) {
         List<String> texts = request.getInstructions();
@@ -81,18 +64,11 @@ public class DouzoneEmbeddingModel implements EmbeddingModel {
         return new EmbeddingResponse(embeddings);
     }
 
-    /**
-     * Document 임베딩 (텍스트 추출 후 단건 API 호출).
-     */
     @Override
     public float[] embed(Document document) {
         return embedSingle(document.getText());
     }
 
-    /**
-     * 벡터 차원 수 반환.
-     * API 호출 없이 설정값을 반환한다.
-     */
     @Override
     public int dimensions() {
         return props.dimensions();
@@ -115,10 +91,7 @@ public class DouzoneEmbeddingModel implements EmbeddingModel {
         return parseEmbedding(responseBody);
     }
 
-    /**
-     * 응답 JSON에서 float 벡터를 추출한다.
-     * response-field 설정값을 기준으로 파싱하되, 알려진 포맷을 순서대로 시도한다.
-     */
+    /** 응답 JSON에서 float 벡터 추출. response-field 우선, 이후 포맷 순서대로 시도. */
     private float[] parseEmbedding(String json) {
         try {
             JsonNode root = objectMapper.readTree(json);
@@ -143,10 +116,7 @@ public class DouzoneEmbeddingModel implements EmbeddingModel {
         }
     }
 
-    /**
-     * 응답 JSON에서 배열 노드를 찾는다.
-     * 우선순위: 설정된 response-field → 직접 배열 → OpenAI 호환 포맷
-     */
+    /** 배열 노드 탐색: response-field → 직접 배열 → embedding 필드 → OpenAI data[0].embedding */
     private JsonNode resolveArrayNode(JsonNode root) {
         String field = props.responseField();
 
@@ -177,11 +147,7 @@ public class DouzoneEmbeddingModel implements EmbeddingModel {
 
     // ── 커스텀 예외 ─────────────────────────────────────────────────────────────
 
-    /**
-     * Douzone 임베딩 API 전용 예외.
-     * {@link LlmException}을 상속하므로 {@link com.jdh.rag.exception.common.RagExceptionAdvice}의
-     * LlmException 핸들러에서 EMBEDDING_FAILED(L0002, 503)로 처리된다.
-     */
+    /** Douzone 임베딩 API 전용 예외. LlmException 상속 → EMBEDDING_FAILED(L0002, 503) 처리. */
     public static class DouzoneEmbeddingException extends LlmException {
         public DouzoneEmbeddingException(String message) {
             super(RagExceptionEnum.EMBEDDING_FAILED, message);

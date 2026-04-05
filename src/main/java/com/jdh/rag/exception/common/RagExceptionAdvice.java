@@ -17,16 +17,7 @@ import org.springframework.web.servlet.NoHandlerFoundException;
 
 /**
  * RAG 서비스 전역 예외 처리.
- *
- * <p>우선순위 (위에서 아래로 — 더 구체적인 타입이 먼저):
- * <ol>
- *   <li>서비스별 예외: {@link IngestionException}, {@link SearchException}, {@link LlmException}
- *       (DouzoneEmbeddingException 포함 — LlmException 상속)</li>
- *   <li>공통 기반: {@link RagException}</li>
- *   <li>Spring MVC 표준: {@link NoHandlerFoundException}, {@link HttpRequestMethodNotSupportedException} 등</li>
- *   <li>Multipart 파일 업로드: {@link MaxUploadSizeExceededException}, {@link MultipartException}</li>
- *   <li>폴백: {@link RuntimeException}, {@link Exception}</li>
- * </ol>
+ * 우선순위: 서비스별(Ingestion/Search/Llm) → 공통 RagException → Spring MVC 표준 → Multipart → 폴백
  */
 @RestControllerAdvice
 @Slf4j
@@ -70,10 +61,7 @@ public class RagExceptionAdvice {
 
     // ── Spring MVC 표준 예외 ───────────────────────────────────────────────────
 
-    /**
-     * 404 - 매핑되지 않은 경로.
-     * application.yaml에 spring.mvc.throw-exception-if-no-handler-found=true 필요.
-     */
+    /** 404 - 매핑되지 않은 경로 */
     @ExceptionHandler(NoHandlerFoundException.class)
     public ResponseEntity<RagExceptionEntity> handleNoHandlerFound(
             HttpServletRequest req, NoHandlerFoundException e) {

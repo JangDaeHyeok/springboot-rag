@@ -13,11 +13,7 @@ public record DouzoneEmbeddingProperties(
         @DefaultValue("https://private-ai.douzone.com/ailab-embedding-8")
         String url,
 
-        /**
-         * 임베딩 벡터 차원 수.
-         * 실제 모델 차원에 맞게 설정해야 VectorStore가 올바르게 동작한다.
-         * ailab-embedding-8 모델의 실제 차원은 API 호출로 확인 필요.
-         */
+        /** 임베딩 벡터 차원 수. 모델 차원과 일치해야 VectorStore가 정상 동작. */
         @DefaultValue("1024")
         int dimensions,
 

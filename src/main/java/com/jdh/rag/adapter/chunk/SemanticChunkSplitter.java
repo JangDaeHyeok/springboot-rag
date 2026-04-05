@@ -18,18 +18,11 @@ import java.util.HashMap;
 import java.util.List;
 
 /**
- * OpenAI 기반 시맨틱 청킹 어댑터.
+ * LLM 기반 시맨틱 청킹 어댑터. rag.chunk.strategy=semantic(기본값) 시 활성화.
  *
- * <p>{@code rag.chunk.strategy=semantic} (기본값) 일 때 활성화된다.
- *
- * <p>구조 판단도 LLM이 수행한다. LLM이 구조가 없다고 판단하면 빈 배열을 반환하며,
- * 이 경우 고정 토큰 크기 방식으로 자동 대체한다.
- *
- * <p>텍스트가 {@link #MAX_SEMANTIC_CHARS}를 초과하거나 LLM 호출에 실패해도
- * 고정 토큰 크기 방식으로 자동 대체(fail-open)한다.
- *
- * <p><b>비용 주의</b>: 문서당 LLM 호출 1회 추가 발생.
- * 텍스트가 {@value MAX_SEMANTIC_CHARS}자를 초과하면 LLM 호출을 생략한다.
+ * LLM이 문서 구조(조항·번호 목록)를 판단해 단위별로 분리한다.
+ * 구조 없음·LLM 실패·{@value MAX_SEMANTIC_CHARS}자 초과 시 TokenTextSplitter로 대체(fail-open).
+ * 수집 요청당 LLM 1회 추가.
  */
 @Slf4j
 @Component

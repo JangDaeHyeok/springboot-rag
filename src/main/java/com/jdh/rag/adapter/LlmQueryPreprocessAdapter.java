@@ -12,19 +12,10 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
 /**
- * OpenAI ChatClient 기반 쿼리 전처리 어댑터.
+ * LLM 기반 쿼리 전처리 어댑터. rag.query-preprocess.enabled=true(기본값) 시 활성화.
  *
- * <p>원문 쿼리를 두 가지 형태로 변환한다.
- * <ul>
- *   <li><b>keywordQuery</b>: 구어체·조사를 제거하고 핵심 명사·동사 중심으로 정제. BM25 recall 향상.</li>
- *   <li><b>vectorQuery</b>: HyDE(Hypothetical Document Embeddings) — 질문의 이상적인 답변이
- *       담긴 가상 문서 2~3문장. 의미 공간에서 실제 문서 청크에 더 가깝게 근접.</li>
- * </ul>
- *
- * <p><b>Fail-open 정책</b>: LLM 호출 실패 또는 응답 파싱 실패 시 원문 쿼리를 그대로 사용한다.
- * 전처리가 메인 파이프라인을 차단하지 않도록 설계되었다.
- *
- * <p><b>비용 주의</b>: 요청당 LLM 호출 1회 추가 발생.
+ * 원문 쿼리 → keywordQuery(BM25용 핵심어) + vectorQuery(HyDE 가상 답변).
+ * Fail-open: 실패 시 원문 그대로 반환. 요청당 LLM 1회 추가.
  */
 @Slf4j
 @Component

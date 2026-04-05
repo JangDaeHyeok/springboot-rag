@@ -7,10 +7,9 @@ import java.util.Objects;
 
 /**
  * 하이브리드 검색 요청.
- * keyword(BM25)와 vector 각각 topN을 검색 후 RRF로 합쳐 topKFinal 반환.
- *
- * <p>keywordQuery와 vectorQuery는 {@link com.jdh.rag.port.QueryPreprocessPort}가
- * 원문 query를 채널별로 최적화한 결과다. 원문 query는 리랭킹·로깅용으로만 사용한다.
+ * keyword(BM25)·vector 각각 topN 검색 후 RRF 합산 → topKFinal 반환.
+ * keywordQuery/vectorQuery는 QueryPreprocessPort가 채널별로 최적화한 결과.
+ * 원문 query는 리랭킹·로깅용으로만 사용.
  */
 @Builder
 public record HybridSearchRequest(

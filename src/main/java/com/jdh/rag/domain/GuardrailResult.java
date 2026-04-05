@@ -1,17 +1,10 @@
 package com.jdh.rag.domain;
 
 /**
- * 가드레일 판단 결과.
+ * 가드레일 판단 결과. PASS(정상) / WARN(진행 허용 + 경고 문구 추가) / BLOCK(즉시 차단).
  *
- * <ul>
- *   <li>{@link Status#PASS}  — 정상. 파이프라인 계속 진행.</li>
- *   <li>{@link Status#WARN}  — 주의. 진행은 허용하되 사용자에게 경고 문구를 덧붙인다.</li>
- *   <li>{@link Status#BLOCK} — 차단. 즉시 {@code userMessage}를 응답으로 반환한다.</li>
- * </ul>
- *
- * @param status      판단 결과
- * @param reason      판단 이유 (로깅·디버깅용, LLM 반환값)
- * @param userMessage 사용자에게 노출할 메시지 (PASS 는 null)
+ * @param reason      LLM 반환 판단 이유 (로깅·디버깅용)
+ * @param userMessage 사용자 노출 메시지 (PASS 는 null)
  */
 public record GuardrailResult(
         Status status,

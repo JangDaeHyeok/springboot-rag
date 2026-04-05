@@ -16,14 +16,8 @@ import java.util.concurrent.StructuredTaskScope;
 import java.util.function.Supplier;
 
 /**
- * 하이브리드 검색 파이프라인:
- * BM25 keyword + Vector를 StructuredTaskScope(virtual thread)로 병렬 실행 → RRF 결합 → 리랭킹(sortByLatest) → 검색 로그 적재
- *
- * <p>두 검색 모두 I/O 바운드(DB 쿼리)이므로 virtual thread 병렬화로
- * 지연 시간이 keyword_time + vector_time → max(keyword_time, vector_time) 으로 단축된다.
- *
- * <p>StructuredTaskScope는 두 subtask의 생명주기를 try 블록에 묶어
- * 스레드 누수 없이 구조적으로 관리한다.
+ * 하이브리드 검색 파이프라인: BM25 + Vector 병렬 실행(StructuredTaskScope) → RRF → 리랭킹 → 로그 적재.
+ * I/O 바운드 두 검색을 virtual thread로 병렬화해 지연 시간을 max(bm25, vector)로 단축.
  */
 @Slf4j
 @Service
