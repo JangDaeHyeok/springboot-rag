@@ -62,7 +62,7 @@ public class LlmQueryPreprocessAdapter implements QueryPreprocessPort {
                 return fallback(originalQuery);
             }
 
-            log.debug("쿼리 전처리 완료: keywordQuery={}, vectorQuery(len={})",
+            log.info("쿼리 전처리 완료: keywordQuery={}, vectorQuery(len={})",
                     keywordQuery, vectorQuery.length());
             return new ProcessedQuery(keywordQuery, vectorQuery);
 

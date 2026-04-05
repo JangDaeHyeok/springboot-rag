@@ -66,7 +66,7 @@ public class SemanticChunkSplitter implements ChunkSplitterPort {
         if (text.length() <= MAX_SEMANTIC_CHARS) {
             List<String> chunks = requestChunksFromLlm(text);
             if (!chunks.isEmpty()) {
-                log.debug("시맨틱 청킹 완료: chunks={}", chunks.size());
+                log.info("시맨틱 청킹 완료: chunks={}", chunks.size());
                 return chunks.stream()
                         .filter(c -> !c.isBlank())
                         .map(c -> new Document(c, new HashMap<>(doc.getMetadata())))
@@ -74,7 +74,7 @@ public class SemanticChunkSplitter implements ChunkSplitterPort {
             }
         }
 
-        log.debug("고정 크기 청킹으로 대체: textLength={}", text.length());
+        log.info("고정 크기 청킹으로 대체: textLength={}", text.length());
         return applyFixedSplitter(List.of(doc));
     }
 

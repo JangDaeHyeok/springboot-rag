@@ -65,7 +65,7 @@ public class HybridSearchService {
             return List.of();
         }
 
-        log.debug("하이브리드 검색: lexical={}건, vector={}건", lexical.size(), vector.size());
+        log.info("하이브리드 검색: lexical={}건, vector={}건", lexical.size(), vector.size());
 
         // 2) RRF 결합
         List<SearchHit> fused = rrfRankFusion.fuse(lexical, vector, SearchHit::id,

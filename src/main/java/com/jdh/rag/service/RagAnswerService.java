@@ -76,7 +76,7 @@ public class RagAnswerService {
 
         // 2) 쿼리 전처리: BM25용 keywordQuery + Vector용 vectorQuery 생성
         ProcessedQuery processed = queryPreprocessPort.preprocess(query);
-        log.debug("[{}] 쿼리 전처리 완료: keyword={}, vectorLen={}",
+        log.info("[{}] 쿼리 전처리 완료: keyword={}, vectorLen={}",
                 requestId, processed.keywordQuery(), processed.vectorQuery().length());
 
         // 3) 하이브리드 검색

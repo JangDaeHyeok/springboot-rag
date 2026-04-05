@@ -59,7 +59,7 @@ public class PgKeywordSearchAdapter implements KeywordSearchPort, KeywordIndexPo
                 .toList();
 
         ragChunkJpaRepository.saveAll(entities);
-        log.debug("pg_search BM25 색인 완료: {}건", entities.size());
+        log.info("pg_search BM25 색인 완료: {}건", entities.size());
     }
 
     private RagChunkEntity toEntity(SearchHit hit) {

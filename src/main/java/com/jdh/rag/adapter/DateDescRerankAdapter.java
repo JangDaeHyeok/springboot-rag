@@ -35,7 +35,7 @@ public class DateDescRerankAdapter implements RerankPort {
         try {
             return Instant.parse(val.toString());
         } catch (Exception e) {
-            log.debug("createdAt 파싱 실패: chunkId={}, value={}", hit.id(), val);
+            log.info("createdAt 파싱 실패: chunkId={}, value={}", hit.id(), val);
             return Instant.EPOCH;
         }
     }

@@ -75,7 +75,7 @@ public class DouzoneEmbeddingModel implements EmbeddingModel {
             embeddings.add(new Embedding(vector, i));
         }
 
-        log.debug("Douzone 임베딩 완료: {}건", texts.size());
+        log.info("Douzone 임베딩 완료: {}건", texts.size());
         return new EmbeddingResponse(embeddings);
     }
 

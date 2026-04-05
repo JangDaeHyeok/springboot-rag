@@ -31,7 +31,7 @@ public class PgSearchLogAdapter implements SearchLogPort {
         if (logs == null || logs.isEmpty()) return;
         List<SearchLogEntity> entities = logs.stream().map(this::toEntity).toList();
         searchLogJpaRepository.saveAll(entities);
-        log.debug("검색 로그 적재 완료: {}건", entities.size());
+        log.info("검색 로그 적재 완료: {}건", entities.size());
     }
 
     private SearchLogEntity toEntity(SearchLog log) {

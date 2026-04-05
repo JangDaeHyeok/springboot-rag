@@ -20,11 +20,11 @@ public class NoOpSearchLogAdapter implements SearchLogPort {
 
     @Override
     public void save(SearchLog searchLog) {
-        log.debug("[NoOp] SearchLog 저장 생략: requestId={}", searchLog.requestId());
+        log.info("[NoOp] SearchLog 저장 생략: requestId={}", searchLog.requestId());
     }
 
     @Override
     public void saveBatch(List<SearchLog> logs) {
-        log.debug("[NoOp] SearchLog 배치 저장 생략: {}건", logs != null ? logs.size() : 0);
+        log.info("[NoOp] SearchLog 배치 저장 생략: {}건", logs != null ? logs.size() : 0);
     }
 }

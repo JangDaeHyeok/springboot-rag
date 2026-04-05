@@ -25,7 +25,7 @@ public class InMemoryKeywordSearchAdapter implements KeywordSearchPort, KeywordI
     public void index(List<SearchHit> hits) {
         if (hits == null) return;
         hits.forEach(hit -> store.put(hit.id(), hit));
-        log.debug("인메모리 키워드 인덱스 크기: {}", store.size());
+        log.info("인메모리 키워드 인덱스 크기: {}", store.size());
     }
 
     @Override
