@@ -138,6 +138,17 @@ class RagExceptionAdviceTest {
         assertThat(res.getBody().errorMsg()).isEqualTo("질의(query)는 필수입니다.");
     }
 
+    @Test
+    @DisplayName("RagException(DOCUMENT_NOT_FOUND) → 404 + D0001")
+    void documentNotFound_404_D0001() {
+        RagException e = new RagException(RagExceptionEnum.DOCUMENT_NOT_FOUND, "docId=doc-001");
+        ResponseEntity<RagExceptionEntity> res = advice.handleRagException(req, e);
+
+        assertThat(res.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(res.getBody().errorCode()).isEqualTo("D0001");
+        assertThat(res.getBody().errorMsg()).isEqualTo("docId=doc-001");
+    }
+
     // ── DouzoneEmbeddingException ─────────────────────────────────────────────
     // DouzoneEmbeddingException은 LlmException을 상속하므로 handleLlmException에서 처리된다.
 

@@ -60,6 +60,9 @@ config/              ← Spring 설정
 | `InputGuardrailPort` | 입력 안전 검사 | `OpenAiGuardrailAdapter` / `NoOpGuardrailAdapter` (`rag.guardrail.enabled`) |
 | `OutputGuardrailPort` | 출력 안전 검사 | 동일 어댑터가 구현 |
 | `SearchLogPort` | 검색 이력 저장 | `PgSearchLogAdapter` / `NoOpSearchLogAdapter` |
+| `DocumentManagementPort` | 문서 조회·삭제 (rag_chunks + vector_store) | `PgDocumentAdapter` / `InMemoryKeywordSearchAdapter` (`rag.keyword-search-type`) |
+| `FeedbackPort` | 사용자 피드백 저장 (answer_accepted 업데이트) | `PgFeedbackAdapter` / `NoOpFeedbackAdapter` (`rag.keyword-search-type`) |
+| `SearchAnalyticsPort` | 검색 품질 분석 (cosine threshold 튜닝) | `PgSearchAnalyticsAdapter` / `NoOpSearchAnalyticsAdapter` (`rag.keyword-search-type`) |
 
 ### 핵심 원칙
 
@@ -87,7 +90,7 @@ RagExceptionAdvice (@RestControllerAdvice)  ← 전역 처리
 RagExceptionEnum                            ← HTTP 상태 + 에러 코드 정의
 ```
 
-에러 코드 체계: `R####` 공통 / `I####` Ingestion / `S####` Search / `L####` LLM
+에러 코드 체계: `R####` 공통 / `D####` Document / `I####` Ingestion / `S####` Search / `L####` LLM
 
 ---
 
@@ -258,9 +261,10 @@ export DB_PASSWORD=ragpass                                        # DB 패스워
 
 ```bash
 ./gradlew test                    # 전체 테스트
-./gradlew test --tests "*.RagExceptionAdviceTest"       # 특정 클래스
-./gradlew test --tests "*.OpenAiGuardrailAdapterTest"   # 가드레일 어댑터 테스트
-./gradlew test --tests "*.RagAnswerServiceTest"         # RAG 답변 서비스 테스트
+./gradlew test --tests "*.RagExceptionAdviceTest"            # 예외 핸들러 테스트
+./gradlew test --tests "*.OpenAiGuardrailAdapterTest"        # 가드레일 어댑터 테스트
+./gradlew test --tests "*.RagAnswerServiceTest"              # RAG 답변 서비스 테스트
+./gradlew test --tests "*.InMemoryKeywordSearchAdapterTest"  # 인메모리 어댑터 테스트
 ```
 
 ---
@@ -274,6 +278,26 @@ export DB_PASSWORD=ragpass                                        # DB 패스워
 3. `application.yaml`에 조건 프로퍼티 문서화
 4. 단위 테스트 작성 (`@ExtendWith(MockitoExtension.class)`)
 
+### 피드백 루프 흐름
+
+```
+PATCH /api/rag/feedback/{requestId}
+  └─ FeedbackService.submitFeedback(requestId, accepted)
+       └─ FeedbackPort.updateFeedback()
+            └─ PgFeedbackAdapter → search_logs.answer_accepted = true/false
+                                 → GET /api/analytics/search 의 수락률 지표에 반영
+```
+
+### 문서 관리 흐름
+
+```
+DELETE /api/documents/{docId}
+  └─ DocumentService.deleteDocument(docId)
+       └─ DocumentManagementPort.deleteByDocId(docId)
+            ├─ PgDocumentAdapter  → vector_store 삭제(VectorStore) + rag_chunks 삭제
+            └─ InMemoryKeywordSearchAdapter → 인메모리 store 삭제만 수행
+```
+
 ### 새 예외 추가 방법
 
 1. `RagExceptionEnum`에 에러 코드 + HTTP 상태 + 메시지 추가
@@ -285,7 +309,7 @@ export DB_PASSWORD=ragpass                                        # DB 패스워
 
 ```
 RagController
-  └─ RagAnswerService.answer()
+  └─ RagAnswerService.answer(RagAnswerRequest)   ← 단일 진입점 (도메인 요청 객체)
        ├─ 1) InputGuardrailPort.check(query)         ← BLOCK이면 즉시 반환
        ├─ 2) QueryPreprocessPort.preprocess(query)   ← keywordQuery + vectorQuery 생성
        │    ├─ LlmQueryPreprocessAdapter (기본, fail-open: 실패 시 원문 그대로)
@@ -298,6 +322,13 @@ RagController
        ├─ 4) ContextBuilder.build() (dedup / trim / sanitize)
        ├─ 5) ChatClient.prompt()   (OpenAI gpt-4o-mini 호출)
        └─ 6) OutputGuardrailPort.check(answer, context) ← BLOCK/WARN 처리
+
+RagController (스트리밍)
+  └─ RagAnswerService.streamAnswer(RagAnswerRequest, Consumer<String>)
+       ├─ 1~4) 위와 동일 (동기 실행)
+       ├─ 5) ChatClient.prompt().stream().content()   ← Flux<String> 토큰 스트리밍
+       └─ (출력 가드레일 생략 — 완전한 답변이 필요)
+       → SSE: token 이벤트(토큰) + done 이벤트(citations)
 ```
 
 ### 문서 수집 파이프라인 흐름

@@ -19,6 +19,9 @@ public enum RagExceptionEnum {
     , EMPTY_CONTENT(HttpStatus.BAD_REQUEST,              "I0003", "수집할 문서 내용이 없습니다.")
     , VECTOR_STORE_FAILED(HttpStatus.SERVICE_UNAVAILABLE, "I0004", "벡터 저장소 저장에 실패하였습니다.")
 
+    // ── Document (D) ──────────────────────────────────────────────────────────
+    , DOCUMENT_NOT_FOUND(HttpStatus.NOT_FOUND, "D0001", "존재하지 않는 문서입니다.")
+
     // ── Search (S) ────────────────────────────────────────────────────────────
     , SEARCH_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE, "S0001", "검색 서비스를 사용할 수 없습니다.")
 

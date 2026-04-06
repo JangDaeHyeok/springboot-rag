@@ -1,6 +1,7 @@
 package com.jdh.rag.adapter;
 
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -34,4 +35,33 @@ public interface RagChunkJpaRepository extends JpaRepository<RagChunkEntity, Str
             @Param("domain")   String domain,
             @Param("topN")     int    topN
     );
+
+    boolean existsByDocId(String docId);
+
+    /** docId 별 문서 요약 정보. 반환: [doc_id, source, domain, version, tenant_id, chunk_count, first_created_at] */
+    @Query("""
+            SELECT r.docId, r.source, r.domain, r.version, r.tenantId, COUNT(r), MIN(r.createdAt)
+            FROM RagChunkEntity r
+            WHERE (:tenantId IS NULL OR r.tenantId = :tenantId)
+              AND (:domain   IS NULL OR r.domain   = :domain)
+            GROUP BY r.docId, r.source, r.domain, r.version, r.tenantId
+            ORDER BY MIN(r.createdAt) DESC
+            """)
+    List<Object[]> findDocumentInfos(
+            @Param("tenantId") String tenantId,
+            @Param("domain")   String domain
+    );
+
+    /** 단일 docId의 문서 요약 정보. 반환: [doc_id, source, domain, version, tenant_id, chunk_count, first_created_at] */
+    @Query("""
+            SELECT r.docId, r.source, r.domain, r.version, r.tenantId, COUNT(r), MIN(r.createdAt)
+            FROM RagChunkEntity r
+            WHERE r.docId = :docId
+            GROUP BY r.docId, r.source, r.domain, r.version, r.tenantId
+            """)
+    List<Object[]> findDocumentInfoByDocId(@Param("docId") String docId);
+
+    @Modifying
+    @Query("DELETE FROM RagChunkEntity r WHERE r.docId = :docId")
+    void deleteByDocId(@Param("docId") String docId);
 }
