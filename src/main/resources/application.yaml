@@ -86,6 +86,9 @@ rag:
 
   max-chars-per-chunk: 1200
 
+  # SSE 스트리밍 타임아웃 (ms). 기본 2분. 고트래픽 환경에서 필요 시 줄인다.
+  sse-timeout-ms: 120000
+
   chunk:
     size: 600
     overlap: 100

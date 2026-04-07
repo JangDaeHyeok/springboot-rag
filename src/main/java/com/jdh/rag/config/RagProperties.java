@@ -16,6 +16,7 @@ public record RagProperties(
         @DefaultValue("5")        int    topKFinal,
         @DefaultValue("0.6")      double vectorThreshold,
         @DefaultValue("1200")     int    maxCharsPerChunk,
+        @DefaultValue("120000")   long   sseTimeoutMs,
         ChunkProperties chunk
 ) {
 

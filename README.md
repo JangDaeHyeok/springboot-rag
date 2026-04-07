@@ -240,6 +240,7 @@ GET /api/analytics/search?from=2026-04-01T00:00:00Z&to=2026-04-07T23:59:59Z
 | `rag.vector-threshold` | `0.6` | 벡터 유사도 하한선 |
 | `rag.chunk.size` | `600` | 고정 청킹 크기 (토큰 수) |
 | `rag.chunk.strategy` | `semantic` | 청킹 전략 (`semantic` \| `fixed`) |
+| `rag.sse-timeout-ms` | `120000` | SSE 스트리밍 타임아웃 (ms) |
 
 #### 청킹 전략 (`rag.chunk.strategy`)
 

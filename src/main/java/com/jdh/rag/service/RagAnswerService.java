@@ -19,7 +19,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.stereotype.Service;
 
-import java.io.UncheckedIOException;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -34,6 +33,7 @@ import java.util.function.Consumer;
  * 6) 출력 가드레일  (환각 감지, 근거 검증)
  *
  * 스트리밍(streamAnswer)은 5번 단계를 토큰 단위로 전송하며, 출력 가드레일을 생략한다.
+ * 1~4단계는 runPipeline()으로 공통화되어 있다.
  */
 @Slf4j
 @Service
@@ -50,63 +50,40 @@ public class RagAnswerService {
     private final RagAnswerPrompts    prompts;
 
     public RagAnswerResponse answer(RagAnswerRequest request) {
-        String requestId = UUID.randomUUID().toString();
+        PipelineResult ctx = runPipeline(request);
 
-        // 1) 입력 가드레일
-        GuardrailResult inputCheck = inputGuardrailPort.check(request.query());
-        if (inputCheck.isBlocked()) {
-            log.warn("[{}] 입력 가드레일 차단: {}", requestId, inputCheck.reason());
-            return new RagAnswerResponse(requestId, inputCheck.userMessage(), List.of());
-        }
-        if (inputCheck.isWarned()) {
-            log.warn("[{}] 입력 가드레일 경고: {}", requestId, inputCheck.reason());
+        if (ctx.isBlocked()) return ctx.blocked();
+
+        if (!ctx.hasDocs()) {
+            return answerWithoutContext(ctx.requestId(), ctx.query());
         }
 
-        // 2) 쿼리 전처리
-        ProcessedQuery processed = queryPreprocessPort.preprocess(request.query());
-        log.info("[{}] 쿼리 전처리 완료: keyword={}, vectorLen={}",
-                requestId, processed.keywordQuery(), processed.vectorQuery().length());
-
-        // 3) 하이브리드 검색
-        HybridSearchRequest searchReq = buildSearchRequest(request, processed);
-        List<SearchHit> ranked = hybridSearchService.search(searchReq, requestId);
-
-        // 4) 검색 결과 없으면 fallback
-        if (ranked.isEmpty()) {
-            log.warn("[{}] 검색 결과 없음 → 일반 LLM 답변", requestId);
-            return answerWithoutContext(requestId, request.query());
-        }
-
-        // 5) 컨텍스트 구성
-        ContextBuilder.BuiltContext built = contextBuilder.build(
-                ranked, ragProperties.topKFinal(), ragProperties.maxCharsPerChunk());
-
-        // 6) LLM 호출
+        // 5) LLM 호출
         String answer;
         try {
             answer = chatClient.prompt()
                     .system(prompts.system())
-                    .user(prompts.userTemplate().formatted(request.query(), built.contextText()))
+                    .user(prompts.userTemplate().formatted(ctx.query(), ctx.built().contextText()))
                     .call()
                     .content();
         } catch (Exception e) {
-            log.error("[{}] LLM 호출 실패: {}", requestId, e.getMessage());
+            log.error("[{}] LLM 호출 실패: {}", ctx.requestId(), e.getMessage());
             throw new LlmException(RagExceptionEnum.LLM_CALL_FAILED, e);
         }
 
-        // 7) 출력 가드레일
-        GuardrailResult outputCheck = outputGuardrailPort.check(answer, built.contextText());
+        // 6) 출력 가드레일
+        GuardrailResult outputCheck = outputGuardrailPort.check(answer, ctx.built().contextText());
         if (outputCheck.isBlocked()) {
-            log.warn("[{}] 출력 가드레일 차단: {}", requestId, outputCheck.reason());
-            return new RagAnswerResponse(requestId, outputCheck.userMessage(), built.citations());
+            log.warn("[{}] 출력 가드레일 차단: {}", ctx.requestId(), outputCheck.reason());
+            return new RagAnswerResponse(ctx.requestId(), outputCheck.userMessage(), ctx.built().citations());
         }
         if (outputCheck.isWarned()) {
-            log.warn("[{}] 출력 가드레일 경고: {}", requestId, outputCheck.reason());
+            log.warn("[{}] 출력 가드레일 경고: {}", ctx.requestId(), outputCheck.reason());
             answer = answer + "\n\n" + outputCheck.userMessage();
         }
 
-        log.info("[{}] RAG 답변 생성 완료: citations={}건", requestId, built.citations().size());
-        return new RagAnswerResponse(requestId, answer, built.citations());
+        log.info("[{}] RAG 답변 생성 완료: citations={}건", ctx.requestId(), ctx.built().citations().size());
+        return new RagAnswerResponse(ctx.requestId(), answer, ctx.built().citations());
     }
 
     /**
@@ -118,58 +95,74 @@ public class RagAnswerService {
      * @return citations 포함 최종 응답 (answer 필드는 "[streamed]"로 표시)
      */
     public RagAnswerResponse streamAnswer(RagAnswerRequest request, Consumer<String> tokenConsumer) {
+        PipelineResult ctx = runPipeline(request);
+
+        if (ctx.isBlocked()) return ctx.blocked();
+
+        if (!ctx.hasDocs()) {
+            streamWithoutContext(ctx.requestId(), ctx.query(), tokenConsumer);
+            return new RagAnswerResponse(ctx.requestId(), "[streamed]", List.of());
+        }
+
+        // 5) LLM 스트리밍 (출력 가드레일 생략)
+        try {
+            chatClient.prompt()
+                    .system(prompts.system())
+                    .user(prompts.userTemplate().formatted(ctx.query(), ctx.built().contextText()))
+                    .stream()
+                    .content()
+                    .doOnNext(tokenConsumer::accept)
+                    .blockLast();
+        } catch (Exception e) {
+            log.error("[{}] LLM 스트리밍 실패: {}", ctx.requestId(), e.getMessage());
+            throw new LlmException(RagExceptionEnum.LLM_CALL_FAILED, e);
+        }
+
+        log.info("[{}] RAG 스트리밍 완료: citations={}건", ctx.requestId(), ctx.built().citations().size());
+        return new RagAnswerResponse(ctx.requestId(), "[streamed]", ctx.built().citations());
+    }
+
+    // ── private ───────────────────────────────────────────────────────────────
+
+    /**
+     * 공통 파이프라인 1~4단계:
+     * 입력 가드레일 → 쿼리 전처리 → 하이브리드 검색 → 컨텍스트 구성.
+     *
+     * @return PipelineResult: isBlocked()이면 즉시 반환, !hasDocs()이면 fallback 경로
+     */
+    private PipelineResult runPipeline(RagAnswerRequest request) {
         String requestId = UUID.randomUUID().toString();
 
         // 1) 입력 가드레일
         GuardrailResult inputCheck = inputGuardrailPort.check(request.query());
         if (inputCheck.isBlocked()) {
-            log.warn("[{}] 입력 가드레일 차단 (stream): {}", requestId, inputCheck.reason());
-            return new RagAnswerResponse(requestId, inputCheck.userMessage(), List.of());
+            log.warn("[{}] 입력 가드레일 차단: {}", requestId, inputCheck.reason());
+            return PipelineResult.blocked(requestId, request.query(),
+                    new RagAnswerResponse(requestId, inputCheck.userMessage(), List.of()));
         }
         if (inputCheck.isWarned()) {
-            log.warn("[{}] 입력 가드레일 경고 (stream): {}", requestId, inputCheck.reason());
+            log.warn("[{}] 입력 가드레일 경고: {}", requestId, inputCheck.reason());
         }
 
         // 2) 쿼리 전처리
         ProcessedQuery processed = queryPreprocessPort.preprocess(request.query());
+        log.info("[{}] 쿼리 전처리 완료: keyword={}, vectorLen={}",
+                requestId, processed.keywordQuery(), processed.vectorQuery().length());
 
         // 3) 하이브리드 검색
-        HybridSearchRequest searchReq = buildSearchRequest(request, processed);
-        List<SearchHit> ranked = hybridSearchService.search(searchReq, requestId);
+        List<SearchHit> ranked = hybridSearchService.search(buildSearchRequest(request, processed), requestId);
 
-        // 4) 검색 결과 없으면 fallback 스트리밍
+        // 4) 검색 결과 없으면 fallback (built=null)
         if (ranked.isEmpty()) {
-            log.warn("[{}] 검색 결과 없음 → 일반 LLM 스트리밍 답변", requestId);
-            streamWithoutContext(requestId, request.query(), tokenConsumer);
-            return new RagAnswerResponse(requestId, "[streamed]", List.of());
+            log.warn("[{}] 검색 결과 없음 → fallback", requestId);
+            return PipelineResult.fallback(requestId, request.query());
         }
 
-        // 5) 컨텍스트 구성
         ContextBuilder.BuiltContext built = contextBuilder.build(
                 ranked, ragProperties.topKFinal(), ragProperties.maxCharsPerChunk());
 
-        // 6) LLM 스트리밍 (출력 가드레일 생략)
-        try {
-            chatClient.prompt()
-                    .system(prompts.system())
-                    .user(prompts.userTemplate().formatted(request.query(), built.contextText()))
-                    .stream()
-                    .content()
-                    .doOnNext(token -> {
-                        try { tokenConsumer.accept(token); }
-                        catch (UncheckedIOException e) { throw e; }
-                    })
-                    .blockLast();
-        } catch (Exception e) {
-            log.error("[{}] LLM 스트리밍 실패: {}", requestId, e.getMessage());
-            throw new LlmException(RagExceptionEnum.LLM_CALL_FAILED, e);
-        }
-
-        log.info("[{}] RAG 스트리밍 완료: citations={}건", requestId, built.citations().size());
-        return new RagAnswerResponse(requestId, "[streamed]", built.citations());
+        return PipelineResult.ready(requestId, request.query(), built);
     }
-
-    // ── private ───────────────────────────────────────────────────────────────
 
     private HybridSearchRequest buildSearchRequest(RagAnswerRequest request, ProcessedQuery processed) {
         return HybridSearchRequest.builder()
@@ -213,5 +206,33 @@ public class RagAnswerService {
             log.error("[{}] LLM 스트리밍 실패(컨텍스트 없음): {}", requestId, e.getMessage());
             throw new LlmException(RagExceptionEnum.LLM_CALL_FAILED, e);
         }
+    }
+
+    /**
+     * runPipeline 결과를 담는 내부 타입.
+     *
+     * @param blocked null이 아니면 가드레일 차단 → 즉시 반환할 응답
+     * @param built   null이면 검색 결과 없음 (fallback 경로)
+     */
+    private record PipelineResult(
+            String requestId,
+            String query,
+            ContextBuilder.BuiltContext built,
+            RagAnswerResponse blocked
+    ) {
+        static PipelineResult blocked(String requestId, String query, RagAnswerResponse response) {
+            return new PipelineResult(requestId, query, null, response);
+        }
+
+        static PipelineResult fallback(String requestId, String query) {
+            return new PipelineResult(requestId, query, null, null);
+        }
+
+        static PipelineResult ready(String requestId, String query, ContextBuilder.BuiltContext built) {
+            return new PipelineResult(requestId, query, built, null);
+        }
+
+        boolean isBlocked() { return blocked != null; }
+        boolean hasDocs()   { return built  != null; }
     }
 }

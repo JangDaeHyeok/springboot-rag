@@ -2,7 +2,7 @@ package com.jdh.rag.adapter;
 
 import com.jdh.rag.domain.DocumentInfo;
 import com.jdh.rag.port.DocumentManagementPort;
-import jakarta.transaction.Transactional;
+import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.vectorstore.VectorStore;
@@ -61,17 +61,13 @@ public class PgDocumentAdapter implements DocumentManagementPort {
 
     private DocumentInfo toDocumentInfo(Object[] row) {
         return new DocumentInfo(
-                str(row[0]),
-                str(row[1]),
-                str(row[2]),
-                str(row[3]),
-                str(row[4]),
-                row[5] instanceof Number n ? n.longValue() : 0,
+                RowMapper.str(row[0]),
+                RowMapper.str(row[1]),
+                RowMapper.str(row[2]),
+                RowMapper.str(row[3]),
+                RowMapper.str(row[4]),
+                RowMapper.toLong(row[5]),
                 row[6] instanceof Instant i ? i : null
         );
-    }
-
-    private String str(Object o) {
-        return o != null ? o.toString() : null;
     }
 }

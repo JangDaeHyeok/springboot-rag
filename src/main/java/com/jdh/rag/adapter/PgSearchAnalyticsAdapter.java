@@ -44,27 +44,16 @@ public class PgSearchAnalyticsAdapter implements SearchAnalyticsPort {
 
     private ScoreBucket toScoreBucket(Object[] row) {
         double low = row[0] instanceof Number n ? n.doubleValue() : 0.0;
-        return new ScoreBucket(low, low + 0.1, toLong(row[1]), toDouble(row[2]));
+        return new ScoreBucket(low, low + 0.1, RowMapper.toLong(row[1]), RowMapper.toDouble(row[2]));
     }
 
     private ChannelStat toChannelStat(Object[] row) {
-        return new ChannelStat(str(row[0]), toLong(row[1]), toDouble(row[2]));
+        return new ChannelStat(RowMapper.str(row[0]), RowMapper.toLong(row[1]), RowMapper.toDouble(row[2]));
     }
 
     private DailyRequestCount toDailyCount(Object[] row) {
-        LocalDate date = row[0] instanceof java.sql.Date d ? d.toLocalDate() : LocalDate.parse(str(row[0]));
-        return new DailyRequestCount(date, toLong(row[1]));
-    }
-
-    private long toLong(Object o) {
-        return o instanceof Number n ? n.longValue() : 0L;
-    }
-
-    private Double toDouble(Object o) {
-        return o instanceof Number n ? n.doubleValue() : null;
-    }
-
-    private String str(Object o) {
-        return o != null ? o.toString() : null;
+        LocalDate date = row[0] instanceof java.sql.Date d ? d.toLocalDate()
+                : LocalDate.parse(RowMapper.str(row[0]));
+        return new DailyRequestCount(date, RowMapper.toLong(row[1]));
     }
 }

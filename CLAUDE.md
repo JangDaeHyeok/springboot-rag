@@ -176,6 +176,18 @@ LLM 답변 생성 **후** 사용자에게 반환하기 전 검사:
   // system()/user() 오버로드 충돌 방지
   when(chatClient.prompt().system(any(String.class)).user(any(String.class)).call().content())
       .thenReturn("답변");
+  // 스트리밍
+  when(chatClient.prompt().system(any(String.class)).user(any(String.class)).stream().content())
+      .thenReturn(Flux.just("토큰1", "토큰2"));
+  ```
+- **`@WebMvcTest`에서 `@ConfigurationProperties` 빈은 자동 로드되지 않는다**: `RagProperties` 같은 설정 빈을 컨트롤러가 직접 주입받는 경우 테스트에 `@MockitoBean`을 추가하고, 필요한 값은 `lenient().when(...)`으로 설정한다.
+  ```java
+  @MockitoBean private RagProperties ragProperties;
+
+  @BeforeEach
+  void setUp() {
+      lenient().when(ragProperties.sseTimeoutMs()).thenReturn(120_000L);
+  }
   ```
 - **테스트에서 프로덕션 코드 내부 구현에 의존하지 않는다**: private 메서드를 직접 테스트하지 않고, public API를 통해 결과를 검증한다.
 - **헬퍼 메서드로 픽스처를 재사용한다**: 반복되는 객체 생성은 `private SearchHit hit(...)`, `private IngestionRequest request(...)` 형태로 분리한다.
@@ -196,6 +208,7 @@ LLM 답변 생성 **후** 사용자에게 반환하기 전 검사:
   }
   ```
 - **네이티브 쿼리는 Repository에만 둔다**: 서비스나 어댑터에서 SQL 문자열을 직접 조합하지 않는다.
+- **`@Transactional`은 Spring 어노테이션을 사용한다**: `jakarta.transaction.Transactional` 대신 `org.springframework.transaction.annotation.Transactional`을 사용한다. `readOnly`, `propagation` 등 Spring 확장 속성을 활용할 수 있다.
 - **Jackson은 3.x(`tools.jackson.databind`)를 사용한다**: `com.fasterxml.jackson` import는 사용하지 않는다.
 
 ### 성능
@@ -206,6 +219,7 @@ LLM 답변 생성 **후** 사용자에게 반환하기 전 검사:
 - **Tika 파싱은 리소스를 닫는다**: `TikaDocumentReader`는 내부적으로 InputStream을 사용하므로 예외 발생 시 리소스 누수에 주의한다.
 - **가드레일 비용 인식**: `rag.guardrail.enabled=true`이면 요청당 최대 LLM 호출 2회 추가 발생. 고트래픽 환경에서는 비동기 처리 또는 캐싱 검토.
 - **쿼리 전처리 비용 인식**: `LlmQueryPreprocessAdapter`가 항상 활성화되어 요청당 LLM 호출 1회 추가 발생. 전처리 실패 시 원문 쿼리를 그대로 사용(fail-open)하므로 메인 파이프라인은 차단되지 않는다.
+- **SSE 스트리밍 타임아웃 조정**: `rag.sse-timeout-ms`(기본값 120000ms)로 제어한다. 응답이 느린 LLM 모델이나 긴 문서 컨텍스트 환경에서는 늘리고, 고트래픽 환경에서는 줄여 커넥션 점유를 줄인다.
 
 ### 일반 품질
 
@@ -265,6 +279,10 @@ export DB_PASSWORD=ragpass                                        # DB 패스워
 ./gradlew test --tests "*.OpenAiGuardrailAdapterTest"        # 가드레일 어댑터 테스트
 ./gradlew test --tests "*.RagAnswerServiceTest"              # RAG 답변 서비스 테스트
 ./gradlew test --tests "*.InMemoryKeywordSearchAdapterTest"  # 인메모리 어댑터 테스트
+./gradlew test --tests "*.FeedbackServiceTest"               # 피드백 서비스 테스트
+./gradlew test --tests "*.DocumentServiceTest"               # 문서 관리 서비스 테스트
+./gradlew test --tests "*.SearchAnalyticsServiceTest"        # 검색 품질 분석 서비스 테스트
+./gradlew test --tests "*.RagControllerTest"                 # RAG 컨트롤러 테스트 (스트리밍 포함)
 ```
 
 ---

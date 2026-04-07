@@ -1,7 +1,7 @@
 package com.jdh.rag.adapter;
 
 import com.jdh.rag.port.FeedbackPort;
-import jakarta.transaction.Transactional;
+import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -28,6 +28,6 @@ public class PgFeedbackAdapter implements FeedbackPort {
     @Transactional
     public void updateFeedback(String requestId, boolean accepted) {
         searchLogJpaRepository.updateAnswerAccepted(requestId, accepted);
-        log.debug("피드백 저장: requestId={}, accepted={}", requestId, accepted);
+        log.info("피드백 저장: requestId={}, accepted={}", requestId, accepted);
     }
 }

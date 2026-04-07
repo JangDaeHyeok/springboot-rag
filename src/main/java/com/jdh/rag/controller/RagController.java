@@ -1,5 +1,6 @@
 package com.jdh.rag.controller;
 
+import com.jdh.rag.config.RagProperties;
 import com.jdh.rag.domain.RagAnswerRequest;
 import com.jdh.rag.domain.RagAnswerResponse;
 import com.jdh.rag.exception.common.RagException;
@@ -26,6 +27,7 @@ public class RagController {
 
     private final RagAnswerService ragAnswerService;
     private final FeedbackService  feedbackService;
+    private final RagProperties    ragProperties;
 
     /**
      * POST /api/rag/answer
@@ -57,7 +59,7 @@ public class RagController {
     public SseEmitter answerStream(@RequestBody AnswerRequest request) {
         validateQuery(request.query());
 
-        SseEmitter emitter = new SseEmitter(120_000L);
+        SseEmitter emitter = new SseEmitter(ragProperties.sseTimeoutMs());
         RagAnswerRequest ragRequest = toRagAnswerRequest(request);
 
         Thread.ofVirtual().start(() -> {

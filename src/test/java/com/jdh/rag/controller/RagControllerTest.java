@@ -1,5 +1,6 @@
 package com.jdh.rag.controller;
 
+import com.jdh.rag.config.RagProperties;
 import com.jdh.rag.domain.RagAnswerRequest;
 import com.jdh.rag.domain.RagAnswerResponse;
 import com.jdh.rag.exception.LlmException;
@@ -7,6 +8,7 @@ import com.jdh.rag.exception.common.enums.RagExceptionEnum;
 import com.jdh.rag.service.FeedbackService;
 import com.jdh.rag.service.RagAnswerService;
 import tools.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -18,8 +20,13 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.util.List;
 import java.util.Map;
 
+import java.util.function.Consumer;
+
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -31,6 +38,13 @@ class RagControllerTest {
     @Autowired private ObjectMapper objectMapper;
     @MockitoBean private RagAnswerService ragAnswerService;
     @MockitoBean private FeedbackService  feedbackService;
+    @MockitoBean private RagProperties    ragProperties;
+
+    @BeforeEach
+    void setUp() {
+        // SSE 타임아웃: 스트리밍 테스트에서만 사용되므로 lenient로 설정
+        lenient().when(ragProperties.sseTimeoutMs()).thenReturn(120_000L);
+    }
 
     // ── 정상 케이스 ────────────────────────────────────────────────────────────
 
@@ -162,6 +176,69 @@ class RagControllerTest {
                                 new RagController.AnswerRequest("질의", null, null, null))))
                 .andExpect(status().isInternalServerError())
                 .andExpect(jsonPath("$.errorCode").value("R0001"));
+    }
+
+    // ── 스트리밍 API ───────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("스트리밍 빈 query이면 400과 errorCode R0002를 반환한다")
+    void 스트리밍_빈_query이면_400과_errorCode_R0002를_반환한다() throws Exception {
+        mockMvc.perform(post("/api/rag/answer/stream")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new RagController.AnswerRequest("", null, null, null))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("R0002"));
+    }
+
+    @Test
+    @DisplayName("스트리밍 null query이면 400과 errorCode R0002를 반환한다")
+    void 스트리밍_null_query이면_400과_errorCode_R0002를_반환한다() throws Exception {
+        mockMvc.perform(post("/api/rag/answer/stream")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new RagController.AnswerRequest(null, null, null, null))))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("R0002"));
+    }
+
+    @Test
+    @DisplayName("스트리밍 정상 요청에서 200과 text/event-stream 헤더를 반환한다")
+    @SuppressWarnings("unchecked")
+    void 스트리밍_정상_요청에서_200과_SSE_헤더를_반환한다() throws Exception {
+        when(ragAnswerService.streamAnswer(any(RagAnswerRequest.class), any(Consumer.class)))
+                .thenReturn(new RagAnswerResponse("req-str-1", "[streamed]", List.of()));
+
+        var result = mockMvc.perform(post("/api/rag/answer/stream")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new RagController.AnswerRequest("연차 신청 방법", null, null, null))))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+
+        mockMvc.perform(asyncDispatch(result))
+                .andExpect(status().isOk())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.TEXT_EVENT_STREAM));
+    }
+
+    @Test
+    @DisplayName("스트리밍 중 서비스 예외이면 error 이벤트가 전송된다")
+    @SuppressWarnings("unchecked")
+    void 스트리밍_서비스_예외이면_error_이벤트가_전송된다() throws Exception {
+        when(ragAnswerService.streamAnswer(any(RagAnswerRequest.class), any(Consumer.class)))
+                .thenThrow(new com.jdh.rag.exception.LlmException(RagExceptionEnum.LLM_CALL_FAILED));
+
+        var result = mockMvc.perform(post("/api/rag/answer/stream")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new RagController.AnswerRequest("질의", null, null, null))))
+                .andExpect(request().asyncStarted())
+                .andReturn();
+
+        // error 이벤트 포함 여부 확인 (SSE body에 "event:error" 포함)
+        String body = mockMvc.perform(asyncDispatch(result))
+                .andReturn().getResponse().getContentAsString();
+        assertThat(body).contains("event:error");
     }
 
     // ── 피드백 API ──────────────────────────────────────────────────────────────
