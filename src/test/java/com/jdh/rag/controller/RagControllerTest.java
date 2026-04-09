@@ -4,6 +4,7 @@ import com.jdh.rag.config.RagProperties;
 import com.jdh.rag.domain.RagAnswerRequest;
 import com.jdh.rag.domain.RagAnswerResponse;
 import com.jdh.rag.exception.LlmException;
+import com.jdh.rag.exception.SearchException;
 import com.jdh.rag.exception.common.enums.RagExceptionEnum;
 import com.jdh.rag.service.FeedbackService;
 import com.jdh.rag.service.RagAnswerService;
@@ -176,6 +177,20 @@ class RagControllerTest {
                                 new RagController.AnswerRequest("질의", null, null, null))))
                 .andExpect(status().isInternalServerError())
                 .andExpect(jsonPath("$.errorCode").value("R0001"));
+    }
+
+    @Test
+    @DisplayName("서비스에서 SearchException 발생 시 503과 errorCode S0001을 반환한다")
+    void 서비스_SearchException_503_S0001() throws Exception {
+        when(ragAnswerService.answer(any(RagAnswerRequest.class)))
+                .thenThrow(new SearchException(RagExceptionEnum.SEARCH_UNAVAILABLE));
+
+        mockMvc.perform(post("/api/rag/answer")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new RagController.AnswerRequest("질의", null, null, null))))
+                .andExpect(status().isServiceUnavailable())
+                .andExpect(jsonPath("$.errorCode").value("S0001"));
     }
 
     // ── 스트리밍 API ───────────────────────────────────────────────────────────

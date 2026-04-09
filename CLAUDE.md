@@ -333,8 +333,9 @@ RagController
        │    ├─ LlmQueryPreprocessAdapter (기본, fail-open: 실패 시 원문 그대로)
        │    └─ NoOpQueryPreprocessAdapter (rag.query-preprocess.enabled=false 시 원문 그대로)
        ├─ 3) HybridSearchService.search()
-       │    ├─ KeywordSearchPort  (keywordQuery로 BM25 검색)
-       │    ├─ VectorSearchPort   (vectorQuery로 Cosine 검색, HyDE)
+       │    ├─ KeywordSearchPort  (keywordQuery로 BM25 검색, 실패 시 빈 결과로 degrade)
+       │    ├─ VectorSearchPort   (vectorQuery로 Cosine 검색, HyDE, 실패 시 빈 결과로 degrade)
+       │    │    ※ 두 채널 모두 실패 시 SearchException(S0001) → 503 반환
        │    ├─ RrfRankFusion      (Reciprocal Rank Fusion, 원문 query 유지)
        │    └─ RerankPort         (score 순 또는 날짜 순, 원문 query 사용)
        ├─ 4) ContextBuilder.build() (dedup / trim / sanitize)
@@ -361,8 +362,8 @@ IngestionController
        │    └─ SemanticChunkSplitter   [strategy=semantic, 기본값]
        │         ├─ OpenAI ChatClient → 구조 판단 + JSON chunks 반환
        │         └─ (LLM이 구조 없다고 판단·LLM 실패·과대 텍스트) → TokenTextSplitter 대체
-       ├─ KeywordIndexPort     (BM25 색인 등록)
-       └─ VectorStore.add()    (임베딩 + PGVector 저장)
+       ├─ VectorStore.add()    (임베딩 + PGVector 저장)
+       └─ KeywordIndexPort     (BM25 색인 등록, 실패 시 VectorStore 롤백 후 IngestionException)
 ```
 
 ---

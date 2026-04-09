@@ -2,6 +2,8 @@ package com.jdh.rag.service;
 
 import com.jdh.rag.domain.HybridSearchRequest;
 import com.jdh.rag.domain.SearchHit;
+import com.jdh.rag.exception.SearchException;
+import com.jdh.rag.exception.common.enums.RagExceptionEnum;
 import com.jdh.rag.port.KeywordSearchPort;
 import com.jdh.rag.port.RerankPort;
 import com.jdh.rag.port.VectorSearchPort;
@@ -32,8 +34,8 @@ public class HybridSearchService {
 
     public List<SearchHit> search(HybridSearchRequest request, String requestId) {
         // 1) BM25 + Vector 병렬 검색 (각각 실패 시 빈 목록으로 degrade)
-        List<SearchHit> lexical;
-        List<SearchHit> vector;
+        ChannelSearchResult lexical;
+        ChannelSearchResult vector;
 
         try (var scope = StructuredTaskScope.open()) {
             var lexicalTask = scope.fork(() ->
@@ -59,10 +61,15 @@ public class HybridSearchService {
             return List.of();
         }
 
-        log.info("하이브리드 검색: lexical={}건, vector={}건", lexical.size(), vector.size());
+        if (lexical.failed() && vector.failed()) {
+            throw new SearchException(RagExceptionEnum.SEARCH_UNAVAILABLE,
+                    "키워드 및 벡터 검색 채널을 모두 사용할 수 없습니다.");
+        }
+
+        log.info("하이브리드 검색: lexical={}건, vector={}건", lexical.hits().size(), vector.hits().size());
 
         // 2) RRF 결합
-        List<SearchHit> fused = rrfRankFusion.fuse(lexical, vector, SearchHit::id,
+        List<SearchHit> fused = rrfRankFusion.fuse(lexical.hits(), vector.hits(), SearchHit::id,
                 request.topKFinal() * 3   // 리랭킹 입력 후보를 넉넉히 확보
         );
 
@@ -75,14 +82,24 @@ public class HybridSearchService {
         return ranked;
     }
 
-    private List<SearchHit> safeSearch(Supplier<List<SearchHit>> supplier,
-                                        String channel) {
+    private ChannelSearchResult safeSearch(Supplier<List<SearchHit>> supplier,
+                                           String channel) {
         try {
             List<SearchHit> result = supplier.get();
-            return result != null ? result : List.of();
+            return ChannelSearchResult.success(result != null ? result : List.of());
         } catch (Exception e) {
             log.error("[{}] 검색 실패: {}", channel, e.getMessage());
-            return List.of();
+            return ChannelSearchResult.failure();
+        }
+    }
+
+    private record ChannelSearchResult(List<SearchHit> hits, boolean failed) {
+        static ChannelSearchResult success(List<SearchHit> hits) {
+            return new ChannelSearchResult(hits, false);
+        }
+
+        static ChannelSearchResult failure() {
+            return new ChannelSearchResult(List.of(), true);
         }
     }
 }

@@ -38,6 +38,11 @@ public class SpringAiVectorSearchAdapter implements VectorSearchPort {
             builder.similarityThreshold(threshold);
         }
 
+        String filterExpression = buildFilterExpression(filters);
+        if (filterExpression != null) {
+            builder.filterExpression(filterExpression);
+        }
+
         List<Document> docs = vectorStore.similaritySearch(builder.build());
 
         return docs.stream()
@@ -67,6 +72,18 @@ public class SpringAiVectorSearchAdapter implements VectorSearchPort {
             if (v == null || !v.toString().equals(entry.getValue().toString())) return false;
         }
         return true;
+    }
+
+    private String buildFilterExpression(Map<String, Object> filters) {
+        if (filters == null || filters.isEmpty()) return null;
+        return filters.entrySet().stream()
+                .map(entry -> entry.getKey() + " == '" + escapeFilterValue(entry.getValue()) + "'")
+                .reduce((left, right) -> left + " && " + right)
+                .orElse(null);
+    }
+
+    private String escapeFilterValue(Object value) {
+        return value == null ? "" : value.toString().replace("\\", "\\\\").replace("'", "\\'");
     }
 
     private String metaStr(Map<String, Object> meta, String key, String fallback) {

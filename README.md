@@ -130,6 +130,7 @@ DELETE /api/documents/{docId}                       ← rag_chunks + vector_stor
 ```
 
 > 문서 갱신은 `DELETE` 후 `/api/ingest/*` 재호출로 처리한다.
+> 인제스트 중 키워드 색인이 실패하면, 직전에 저장된 벡터 데이터도 즉시 롤백해 반쪽 저장 상태를 남기지 않는다.
 
 ### 질의응답
 
@@ -192,6 +193,11 @@ Content-Type: application/json
 ```
 
 `search_logs.answer_accepted` 를 업데이트한다. cosine threshold 튜닝에 사용되는 핵심 신호다.
+
+### 검색 장애 응답 정책
+
+- 한쪽 검색 채널만 실패하면 남은 채널 결과로 계속 처리한다.
+- 키워드 검색과 벡터 검색이 모두 실패하면 일반 fallback 답변으로 숨기지 않고 `503 Service Unavailable`과 `S0001`을 반환한다.
 
 ### 검색 품질 분석
 

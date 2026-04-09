@@ -10,6 +10,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.Captor;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
@@ -19,6 +21,7 @@ import org.springframework.core.io.ByteArrayResource;
 import org.springframework.core.io.Resource;
 
 import java.io.IOException;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -28,6 +31,8 @@ import static org.mockito.Mockito.*;
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
 class IngestionServiceTest {
+
+    @Captor private ArgumentCaptor<List<String>> idsCaptor;
 
     @Mock private VectorStore vectorStore;
     @Mock private KeywordIndexPort keywordIndexPort;
@@ -107,6 +112,23 @@ class IngestionServiceTest {
     }
 
     @Test
+    @DisplayName("키워드 색인 실패 시 벡터 저장을 롤백하고 IngestionException(INGESTION_FAILED)을 던진다")
+    void keywordIndexFailure_rollsBackVectorStore() {
+        doThrow(new RuntimeException("BM25 색인 실패"))
+                .when(keywordIndexPort).index(anyList());
+
+        IngestionRequest request = request("doc-rollback", "충분히 긴 내용입니다. ".repeat(10));
+
+        assertThatThrownBy(() -> service.ingest(request))
+                .isInstanceOf(IngestionException.class)
+                .extracting(e -> ((IngestionException) e).getExceptionEnum())
+                .isEqualTo(RagExceptionEnum.INGESTION_FAILED);
+
+        verify(vectorStore).delete(idsCaptor.capture());
+        assertThat(idsCaptor.getValue()).containsExactly("doc-rollback-0");
+    }
+
+    @Test
     @DisplayName("정상 수집 시 IngestionResult를 반환한다")
     void normalIngest_returnsIngestionResult() {
         IngestionRequest request = request("doc-001", "충분히 긴 내용입니다. ".repeat(10));
@@ -128,6 +150,18 @@ class IngestionServiceTest {
 
         verify(keywordIndexPort).index(argThat(hits ->
                 hits.stream().allMatch(h -> h.id().startsWith("law-doc-"))
+        ));
+    }
+
+    @Test
+    @DisplayName("정상 수집 시 VectorStore에는 chunkId와 동일한 document id가 저장된다")
+    void normalIngest_vectorStoreDocumentIdMatchesChunkId() {
+        IngestionRequest request = request("law-doc", "충분히 긴 내용입니다. ".repeat(10));
+
+        service.ingest(request);
+
+        verify(vectorStore).add(argThat(docs ->
+                docs.stream().allMatch(doc -> doc.getId().startsWith("law-doc-"))
         ));
     }
 

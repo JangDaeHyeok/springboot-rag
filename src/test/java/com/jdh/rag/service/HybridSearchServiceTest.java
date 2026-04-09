@@ -3,6 +3,7 @@ package com.jdh.rag.service;
 import com.jdh.rag.config.RagProperties;
 import com.jdh.rag.domain.HybridSearchRequest;
 import com.jdh.rag.domain.SearchHit;
+import com.jdh.rag.exception.SearchException;
 import com.jdh.rag.port.KeywordSearchPort;
 import com.jdh.rag.port.RerankPort;
 import com.jdh.rag.port.VectorSearchPort;
@@ -18,6 +19,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import java.util.List;
 import java.util.Map;
 
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
@@ -123,6 +125,37 @@ class HybridSearchServiceTest {
     }
 
     @Test
+    @DisplayName("keyword와 vector 검색이 모두 실패하면 SearchException을 던진다")
+    void keyword와_vector_검색이_모두_실패하면_SearchException을_던진다() {
+        HybridSearchRequest req = req("질의", "질의 키워드", "가상 답변", 5, 5, 3, 0.6);
+        when(keywordSearchPort.search(any(), anyInt(), any()))
+                .thenThrow(new RuntimeException("BM25 장애"));
+        when(vectorSearchPort.search(any(), anyInt(), any(), any()))
+                .thenThrow(new RuntimeException("Vector 장애"));
+
+        assertThatThrownBy(() -> service.search(req, "req-006"))
+                .isInstanceOf(SearchException.class);
+
+        verify(rerankPort, never()).rerank(any(), any(), anyInt(), anyBoolean());
+        verify(searchLogger, never()).logBatch(any(), any(), any(), any());
+    }
+
+    @Test
+    @DisplayName("한 채널이 정상적으로 빈 결과를 반환하면 SearchException 없이 빈 목록을 반환한다")
+    void 한_채널이_정상적으로_빈_결과를_반환하면_SearchException_없이_빈_목록을_반환한다() {
+        HybridSearchRequest req = req("질의", "질의 키워드", "가상 답변", 5, 5, 3, 0.6);
+        when(keywordSearchPort.search(any(), anyInt(), any()))
+                .thenThrow(new RuntimeException("BM25 장애"));
+        when(vectorSearchPort.search(any(), anyInt(), any(), any()))
+                .thenReturn(List.of());
+        when(rerankPort.rerank(any(), any(), anyInt(), anyBoolean())).thenReturn(List.of());
+
+        List<SearchHit> result = service.search(req, "req-006-empty");
+
+        assertThat(result).isEmpty();
+    }
+
+    @Test
     @DisplayName("검색 결과 없으면 빈 목록 반환")
     void 검색_결과_없으면_빈_목록_반환() {
         HybridSearchRequest req = req("없는 질의", "없는 키워드", "가상 답변", 5, 5, 3, 0.6);
@@ -130,7 +163,7 @@ class HybridSearchServiceTest {
         when(vectorSearchPort.search(any(), anyInt(), any(), any())).thenReturn(List.of());
         when(rerankPort.rerank(any(), any(), anyInt(), anyBoolean())).thenReturn(List.of());
 
-        List<SearchHit> result = service.search(req, "req-006");
+        List<SearchHit> result = service.search(req, "req-007");
 
         assertThat(result).isEmpty();
     }
@@ -150,7 +183,7 @@ class HybridSearchServiceTest {
         when(vectorSearchPort.search(any(), anyInt(), any(), any())).thenReturn(List.of());
         when(rerankPort.rerank(any(), any(), anyInt(), anyBoolean())).thenReturn(List.of());
 
-        service.search(req, "req-007");
+        service.search(req, "req-008");
 
         verify(keywordSearchPort).search(any(), anyInt(), eq(filters));
         verify(vectorSearchPort).search(any(), anyInt(), any(), eq(filters));

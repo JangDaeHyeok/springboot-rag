@@ -106,10 +106,29 @@ public class IngestionService {
 
         // 4) 키워드 인덱스
         List<SearchHit> hits = toSearchHits(annotated);
-        keywordIndexPort.index(hits);
+        try {
+            keywordIndexPort.index(hits);
+        } catch (Exception e) {
+            rollbackVectorStore(annotated, docId, e);
+            throw new IngestionException(RagExceptionEnum.INGESTION_FAILED,
+                    "키워드 색인에 실패하였습니다. 저장된 벡터 데이터는 롤백되었습니다: docId=" + docId, e);
+        }
 
         log.info("수집 완료: docId={}, chunks={}", docId, annotated.size());
         return new IngestionResult(docId, annotated.size());
+    }
+
+    private void rollbackVectorStore(List<Document> annotated, String docId, Exception cause) {
+        List<String> ids = annotated.stream()
+                .map(Document::getId)
+                .toList();
+        try {
+            vectorStore.delete(ids);
+            log.warn("키워드 색인 실패로 벡터 저장 롤백: docId={}, chunks={}, reason={}",
+                    docId, ids.size(), cause.getMessage());
+        } catch (Exception rollbackError) {
+            log.error("벡터 저장 롤백 실패: docId={}, msg={}", docId, rollbackError.getMessage(), rollbackError);
+        }
     }
 
     private List<Document> annotateChunks(List<Document> chunks, String docId) {
@@ -118,7 +137,7 @@ public class IngestionService {
             Document chunk = chunks.get(i);
             Map<String, Object> meta = new HashMap<>(chunk.getMetadata());
             meta.put("chunkId", docId + "-" + i);
-            result.add(new Document(chunk.getText(), meta));
+            result.add(new Document(docId + "-" + i, chunk.getText(), meta));
         }
         return result;
     }
