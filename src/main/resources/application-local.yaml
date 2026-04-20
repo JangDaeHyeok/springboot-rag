@@ -1,12 +1,16 @@
 # 로컬 개발 전용 설정 (application.yaml 기본값을 오버라이드)
 # 실행 방법: --spring.profiles.active=local
 spring:
+  autoconfigure:
+    exclude:
+      - org.springframework.ai.vectorstore.milvus.autoconfigure.MilvusVectorStoreAutoConfiguration
   sql:
     init:
       mode: always   # 로컬 DB 스키마 자동 초기화
 
 rag:
   keyword-search-type: memory   # DB 없이 실행 가능
+  vector-store-type: memory     # Milvus 없이 실행 가능 (인메모리 SimpleVectorStore)
   guardrail:
     enabled: false               # LLM 비용 절감
   query-preprocess:

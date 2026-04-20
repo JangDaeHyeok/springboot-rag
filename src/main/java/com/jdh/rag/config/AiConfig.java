@@ -22,9 +22,8 @@ public class AiConfig {
     }
 
     /**
-     * SimpleVectorStore (인메모리) - 데이터소스 없이 실행할 때 폴백.
-     * spring-ai-starter-vector-store-pgvector + 데이터소스가 있으면
-     * PgVectorStore 가 먼저 등록되므로 이 빈은 생성되지 않는다.
+     * SimpleVectorStore (인메모리) 폴백.
+     * MilvusVectorStoreAutoConfiguration 이 비활성화된 경우(local 프로파일 등) 사용된다.
      */
     @Bean
     @ConditionalOnMissingBean(VectorStore.class)

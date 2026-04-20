@@ -14,9 +14,11 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * PostgreSQL 기반 문서 관리 어댑터.
- * rag_chunks 와 vector_store 양쪽을 모두 삭제한다.
- * (vector_store 는 Spring AI가 관리하는 테이블이므로 VectorStoreRepository로 ID를 조회한 뒤 VectorStore.delete()로 제거한다.)
+ * PostgreSQL(BM25) + Milvus(Vector) 기반 문서 관리 어댑터.
+ * rag_chunks(BM25 인덱스)와 Milvus VectorStore 양쪽을 모두 삭제한다.
+ *
+ * 벡터 삭제 시 rag_chunks.chunk_id 를 Milvus primary key로 활용한다.
+ * IngestionService 에서 Document.id = chunkId 로 저장하므로 1:1 대응이 보장된다.
  */
 @Slf4j
 @Component
@@ -25,7 +27,6 @@ import java.util.Optional;
 public class PgDocumentAdapter implements DocumentManagementPort {
 
     private final RagChunkJpaRepository ragChunkJpaRepository;
-    private final VectorStoreRepository vectorStoreRepository;
     private final VectorStore           vectorStore;
 
     @Override
@@ -48,11 +49,11 @@ public class PgDocumentAdapter implements DocumentManagementPort {
     @Override
     @Transactional
     public void deleteByDocId(String docId) {
-        // 1) vector_store 삭제 (Spring AI 관리 테이블)
-        List<String> vsIds = vectorStoreRepository.findIdsByDocId(docId);
-        if (!vsIds.isEmpty()) {
-            vectorStore.delete(vsIds);
-            log.info("vector_store에서 docId={} 삭제: {}건", docId, vsIds.size());
+        // 1) Milvus 벡터 삭제: rag_chunks의 chunkId = Milvus 컬렉션 primary key
+        List<String> chunkIds = ragChunkJpaRepository.findChunkIdsByDocId(docId);
+        if (!chunkIds.isEmpty()) {
+            vectorStore.delete(chunkIds);
+            log.info("Milvus에서 docId={} 삭제: {}건", docId, chunkIds.size());
         }
         // 2) rag_chunks 삭제 (BM25 인덱스 포함)
         ragChunkJpaRepository.deleteByDocId(docId);

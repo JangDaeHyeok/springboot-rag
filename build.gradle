@@ -30,8 +30,8 @@ dependencies {
 	// Spring AI - Chat + Embedding (OpenAI)
 	implementation 'org.springframework.ai:spring-ai-starter-model-openai'
 
-	// Spring AI - PGVector VectorStore
-	implementation 'org.springframework.ai:spring-ai-starter-vector-store-pgvector'
+	// Spring AI - Milvus VectorStore
+	implementation 'org.springframework.ai:spring-ai-starter-vector-store-milvus'
 
 	// Spring AI - Apache Tika 기반 문서 로더 (PDF, HTML, DOCX 등)
 	implementation 'org.springframework.ai:spring-ai-tika-document-reader'

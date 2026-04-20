@@ -18,6 +18,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+// VectorStore 인터페이스를 목킹하므로 PGVector/Milvus 구현체 변경과 무관하게 동작한다.
 class SpringAiVectorSearchAdapterTest {
 
     private final VectorStore vectorStore = mock(VectorStore.class);

@@ -1,12 +1,11 @@
 -- ────────────────────────────────────────────────────────────────────────────
 -- RAG DB 스키마
 --
--- vector_store : Spring AI PGVector가 자동 생성 (initialize-schema=true)
 -- rag_chunks   : BM25 키워드 검색용 (pg_search). 인제스트 시 직접 INSERT.
 -- search_logs  : cosine threshold 튜닝 및 평가 데이터 적재.
+-- 벡터 저장소   : Milvus (별도 컨테이너, Spring AI Milvus VectorStore가 자동 관리)
 -- ────────────────────────────────────────────────────────────────────────────
 
-CREATE EXTENSION IF NOT EXISTS vector;
 CREATE EXTENSION IF NOT EXISTS pg_search;
 
 -- ── rag_chunks ───────────────────────────────────────────────────────────────

@@ -12,10 +12,10 @@ Spring Boot 기반 사내 문서 QA 시스템.
 |---|---|
 | Language / Runtime | Java 25 |
 | Framework | Spring Boot 4.0.5 |
-| AI | Spring AI 2.0.0-M4 (OpenAI Chat, PGVector) |
+| AI | Spring AI 2.0.0-M4 (OpenAI Chat, Milvus) |
 | 키워드 검색 | pg_search (ParadeDB BM25) |
-| 벡터 검색 | Spring AI PGVector (Cosine) |
-| DB | PostgreSQL |
+| 벡터 검색 | Spring AI Milvus VectorStore (Cosine) |
+| DB | PostgreSQL (BM25) + Milvus (Vector) |
 | ORM | Spring Data JPA / Hibernate |
 | 임베딩 | Douzone 사내 API (openai 전환 가능) |
 | LLM / 가드레일 | OpenAI gpt-4o-mini |
@@ -40,6 +40,13 @@ exception/    ← 예외 계층 (RagException, 서비스별 예외, GlobalAdvice
 config/       ← Spring 설정
 ```
 
+### 인프라 역할 분리
+
+| 인프라 | 역할 |
+|---|---|
+| **PostgreSQL (ParadeDB)** | BM25 키워드 검색 (`rag_chunks`), 검색 로그 (`search_logs`) |
+| **Milvus** | Cosine 유사도 벡터 검색 (Spring AI VectorStore 추상화) |
+
 ### RAG 답변 파이프라인
 
 ```
@@ -47,7 +54,7 @@ HTTP 요청
   └─ RagAnswerService.answer(RagAnswerRequest)
        ├─ 1) InputGuardrailPort   ← 프롬프트 인젝션 차단
        ├─ 2) QueryPreprocessPort  ← keywordQuery(BM25) + vectorQuery(HyDE) 생성
-       ├─ 3) HybridSearchService  ← BM25(keywordQuery) + Vector(vectorQuery) + RRF + Rerank
+       ├─ 3) HybridSearchService  ← BM25(keywordQuery) + Milvus(vectorQuery) + RRF + Rerank
        ├─ 4) ContextBuilder       ← dedup / trim / sanitize
        ├─ 5) ChatClient           ← OpenAI gpt-4o-mini 호출
        └─ 6) OutputGuardrailPort  ← 환각 감지 / 근거 검증
@@ -69,24 +76,34 @@ HTTP 요청
 |---|---|---|
 | `OPENAI_API_KEY` | OpenAI API 키 (Chat LLM + 가드레일) | ✅ |
 | `DOUZONE_EMBEDDING_URL` | Douzone 사내 임베딩 API URL | ✅ |
-| `DB_PASSWORD` | DB 패스워드 (미설정 시 `ragpass`) | - |
+| `DB_PASSWORD` | PostgreSQL 패스워드 (미설정 시 `ragpass`) | - |
+| `MILVUS_HOST` | Milvus 호스트 (미설정 시 `localhost`) | - |
+| `MILVUS_PORT` | Milvus gRPC 포트 (미설정 시 `19530`) | - |
+| `MILVUS_USERNAME` | Milvus 접속 계정 (미설정 시 `root`) | - |
+| `MILVUS_PASSWORD` | Milvus 패스워드 (미설정 시 `milvus`, **운영 시 반드시 변경**) | - |
 
 ### 로컬 실행
 
 ```bash
-# 1. PostgreSQL + pg_search(ParadeDB) 컨테이너 시작
+# 1. PostgreSQL(ParadeDB) + Milvus 컨테이너 시작
 docker compose up -d
 
 # 2. 환경변수 설정
 export OPENAI_API_KEY=sk-...
 export DOUZONE_EMBEDDING_URL=https://...
 
-# 3. 로컬 프로파일로 실행 (in-memory, 가드레일/전처리 비활성화, 스키마 자동 초기화)
+# 3. 로컬 프로파일로 실행
+#    (인메모리 키워드·벡터 검색, 가드레일/전처리 비활성화, 스키마 자동 초기화)
 ./gradlew bootRun --args='--spring.profiles.active=local'
 
-# 운영 설정 그대로 실행 (DB, 가드레일, LLM 전처리 모두 활성화)
+# 전체 스택 실행 (PostgreSQL BM25 + Milvus 벡터 + 가드레일 + LLM 전처리)
 ./gradlew bootRun
 ```
+
+> **로컬 프로파일** (`--spring.profiles.active=local`):
+> - `rag.keyword-search-type=memory` → PostgreSQL 불필요
+> - `rag.vector-store-type=memory` + `spring.autoconfigure.exclude` → Milvus 자동설정 비활성화, `SimpleVectorStore`(인메모리) 사용
+> - Docker 없이도 기본 동작 확인 가능
 
 ### 테스트 실행
 
@@ -126,11 +143,11 @@ file=@규정집.pdf  docId=doc-001  source=규정집.pdf  domain=hr  version=202
 ```
 GET    /api/documents?tenantId=default&domain=hr   ← 문서 목록 조회
 GET    /api/documents/{docId}                       ← 특정 문서 정보 (없으면 404)
-DELETE /api/documents/{docId}                       ← rag_chunks + vector_store 동시 삭제 → 204
+DELETE /api/documents/{docId}                       ← rag_chunks(BM25) + Milvus 동시 삭제 → 204
 ```
 
 > 문서 갱신은 `DELETE` 후 `/api/ingest/*` 재호출로 처리한다.
-> 인제스트 중 키워드 색인이 실패하면, 직전에 저장된 벡터 데이터도 즉시 롤백해 반쪽 저장 상태를 남기지 않는다.
+> 인제스트 중 키워드 색인이 실패하면, 직전에 저장된 Milvus 벡터 데이터도 즉시 롤백해 반쪽 저장 상태를 남기지 않는다.
 
 ### 질의응답
 
@@ -240,6 +257,7 @@ GET /api/analytics/search?from=2026-04-01T00:00:00Z&to=2026-04-07T23:59:59Z
 |---|---|---|
 | `rag.embedding.type` | `douzone` | 임베딩 모델 선택 (`douzone` \| `openai`) |
 | `rag.keyword-search-type` | `postgres` | 키워드 검색 어댑터 (`postgres` \| `memory`) |
+| `rag.vector-store-type` | `milvus` | 벡터 저장소 어댑터 (`milvus` \| `memory`) |
 | `rag.guardrail.enabled` | `true` | 소프트 가드레일 활성화 여부 |
 | `rag.query-preprocess.enabled` | `true` | 쿼리 전처리 활성화 여부 |
 | `rag.top-k-final` | `5` | 최종 검색 결과 수 |
@@ -247,6 +265,28 @@ GET /api/analytics/search?from=2026-04-01T00:00:00Z&to=2026-04-07T23:59:59Z
 | `rag.chunk.size` | `600` | 고정 청킹 크기 (토큰 수) |
 | `rag.chunk.strategy` | `semantic` | 청킹 전략 (`semantic` \| `fixed`) |
 | `rag.sse-timeout-ms` | `120000` | SSE 스트리밍 타임아웃 (ms) |
+
+#### Milvus 연결 설정
+
+| 프로퍼티 | 기본값 | 설명 |
+|---|---|---|
+| `spring.ai.vectorstore.milvus.client.host` | `localhost` (`$MILVUS_HOST`) | Milvus 서버 호스트 |
+| `spring.ai.vectorstore.milvus.client.port` | `19530` (`$MILVUS_PORT`) | Milvus gRPC 포트 |
+| `spring.ai.vectorstore.milvus.client.username` | `root` (`$MILVUS_USERNAME`) | Milvus 접속 계정 |
+| `spring.ai.vectorstore.milvus.client.password` | `milvus` (`$MILVUS_PASSWORD`) | Milvus 패스워드 **(운영 시 반드시 변경)** |
+| `spring.ai.vectorstore.milvus.collection-name` | `vector_store` | Milvus 컬렉션 이름 |
+| `spring.ai.vectorstore.milvus.embedding-dimension` | `1024` | 임베딩 차원 (모델과 일치 필수) |
+| `spring.ai.vectorstore.milvus.index-type` | `IVF_FLAT` | 인덱스 타입 |
+| `spring.ai.vectorstore.milvus.metric-type` | `COSINE` | 유사도 메트릭 |
+
+> **임베딩 모델 전환 시 주의**: `rag.embedding.type` 변경 시 Milvus 컬렉션 DROP 후 문서 전체 재수집 필요.
+
+#### 벡터 저장소 어댑터 (`rag.vector-store-type`)
+
+| 값 | 동작 |
+|---|---|
+| `milvus` (기본값) | Milvus Standalone에 연결. `docker compose up -d` 필요. |
+| `memory` | Spring AI `SimpleVectorStore` (인메모리). Docker 불필요. 재시작 시 초기화. |
 
 #### 청킹 전략 (`rag.chunk.strategy`)
 
@@ -264,9 +304,7 @@ GET /api/analytics/search?from=2026-04-01T00:00:00Z&to=2026-04-07T23:59:59Z
 | 출력 | 설명 | 사용 채널 |
 |---|---|---|
 | `keywordQuery` | 핵심 명사·동사 중심 쿼리 | BM25 검색 |
-| `vectorQuery` | 이상적 답변을 서술한 가상 문서 (HyDE) | Vector 검색 |
-
-> **임베딩 모델 전환 시 주의**: `rag.embedding.type` 변경 시 `vector_store` 테이블 DROP 후 문서 전체 재수집 필요.
+| `vectorQuery` | 이상적 답변을 서술한 가상 문서 (HyDE) | Milvus 벡터 검색 |
 
 ---
 

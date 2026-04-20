@@ -16,10 +16,10 @@
 |---|---|
 | Language / Runtime | Java 25 |
 | Framework | Spring Boot 4.x |
-| AI | Spring AI 2.x (OpenAI Chat, PGVector) |
+| AI | Spring AI 2.x (OpenAI Chat, Milvus) |
 | 키워드 검색 | pg_search (ParadeDB BM25) |
-| 벡터 검색 | Spring AI PGVector (Cosine) |
-| DB | PostgreSQL |
+| 벡터 검색 | Spring AI Milvus VectorStore (Cosine) |
+| DB | PostgreSQL (BM25) + Milvus (Vector) |
 | ORM | Spring Data JPA / Hibernate |
 | 임베딩 | Douzone 사내 API (기본값) / OpenAI 전환 가능 |
 | LLM / 가드레일 | OpenAI ChatClient (gpt-4o-mini) |
@@ -54,13 +54,13 @@ config/              ← Spring 설정
 | `QueryPreprocessPort` | 쿼리 전처리 (BM25·Vector 채널별 최적화) | `LlmQueryPreprocessAdapter` / `NoOpQueryPreprocessAdapter` (`rag.query-preprocess.enabled`) |
 | `KeywordSearchPort` | BM25 키워드 검색 | `PgKeywordSearchAdapter` / `InMemoryKeywordSearchAdapter` (`rag.keyword-search-type`) |
 | `KeywordIndexPort` | 문서 BM25 색인 | 동일 어댑터가 구현 |
-| `VectorSearchPort` | Cosine 벡터 검색 | `SpringAiVectorSearchAdapter` |
+| `VectorSearchPort` | Cosine 벡터 검색 | `SpringAiVectorSearchAdapter` (Milvus 또는 SimpleVectorStore, `rag.vector-store-type`) |
 | `ChunkSplitterPort` | 문서 청킹 | `FixedTokenChunkSplitter`(기본) / `SemanticChunkSplitter` (`rag.chunk.strategy`) |
 | `RerankPort` | 검색 결과 재정렬 | `ScoreRerankAdapter` / `DateDescRerankAdapter` — `RerankDispatcher`가 위임 |
 | `InputGuardrailPort` | 입력 안전 검사 | `OpenAiGuardrailAdapter` / `NoOpGuardrailAdapter` (`rag.guardrail.enabled`) |
 | `OutputGuardrailPort` | 출력 안전 검사 | 동일 어댑터가 구현 |
 | `SearchLogPort` | 검색 이력 저장 | `PgSearchLogAdapter` / `NoOpSearchLogAdapter` |
-| `DocumentManagementPort` | 문서 조회·삭제 (rag_chunks + vector_store) | `PgDocumentAdapter` / `InMemoryKeywordSearchAdapter` (`rag.keyword-search-type`) |
+| `DocumentManagementPort` | 문서 조회·삭제 (rag_chunks + Milvus) | `PgDocumentAdapter` / `InMemoryKeywordSearchAdapter` (`rag.keyword-search-type`) |
 | `FeedbackPort` | 사용자 피드백 저장 (answer_accepted 업데이트) | `PgFeedbackAdapter` / `NoOpFeedbackAdapter` (`rag.keyword-search-type`) |
 | `SearchAnalyticsPort` | 검색 품질 분석 (cosine threshold 튜닝) | `PgSearchAnalyticsAdapter` / `NoOpSearchAnalyticsAdapter` (`rag.keyword-search-type`) |
 
@@ -70,6 +70,9 @@ config/              ← Spring 설정
 - **도메인 모델(`domain/`)에는 프레임워크 의존성을 넣지 않는다.** 순수 Java record만 허용.
 - **어댑터 교체는 `@ConditionalOnProperty`로 제어한다.**
   - `rag.keyword-search-type=postgres|memory`
+  - `rag.vector-store-type=milvus|memory`
+    - `milvus`: Spring AI `MilvusVectorStoreAutoConfiguration` 자동 활성화 (클래스패스 존재만으로 동작)
+    - `memory`: `application-local.yaml`의 `spring.autoconfigure.exclude`로 Milvus 자동설정 비활성화 → `AiConfig`의 `SimpleVectorStore` 폴백 사용
   - `rag.embedding.type=douzone|openai`
   - `rag.guardrail.enabled=true|false`
   - `rag.chunk.strategy=fixed|semantic`
@@ -239,19 +242,21 @@ LLM 답변 생성 **후** 사용자에게 반환하기 전 검사:
 ### 로컬 실행
 
 ```bash
-# PostgreSQL + pg_search(ParadeDB) 컨테이너 시작
+# PostgreSQL(ParadeDB/BM25) + Milvus 컨테이너 시작
 docker compose up -d
 
 # 환경변수 설정
 export OPENAI_API_KEY=sk-...                                      # Chat LLM + 가드레일용 (필수)
 export DOUZONE_EMBEDDING_URL=https://private-ai.example.com/...   # Douzone 임베딩 API (필수, 기본값 없음)
 export DB_PASSWORD=ragpass                                        # DB 패스워드 (미설정 시 ragpass 사용)
+export MILVUS_USERNAME=root                                       # Milvus 계정 (미설정 시 root)
+export MILVUS_PASSWORD=your-milvus-password                       # Milvus 패스워드 (미설정 시 milvus — 운영 시 반드시 변경)
 
-# 로컬 프로파일 사용 (application-local.yaml: in-memory, 가드레일/전처리 비활성화, 스키마 자동 초기화)
+# 로컬 프로파일 사용 (application-local.yaml: in-memory 키워드·벡터, 가드레일/전처리 비활성화, 스키마 자동 초기화)
 ./gradlew bootRun --args='--spring.profiles.active=local'
 
 # 수동으로 개별 옵션 조합
-./gradlew bootRun --args='--rag.keyword-search-type=memory --rag.guardrail.enabled=false --rag.query-preprocess.enabled=false'
+./gradlew bootRun --args='--rag.keyword-search-type=memory --rag.vector-store-type=memory --rag.guardrail.enabled=false --rag.query-preprocess.enabled=false'
 ```
 
 ### 환경별 설정
@@ -259,6 +264,7 @@ export DB_PASSWORD=ragpass                                        # DB 패스워
 | 프로퍼티 | 로컬/테스트 (`local` 프로파일) | 운영(Douzone 사내망) |
 |---|---|---|
 | `rag.keyword-search-type` | `memory` | `postgres` |
+| `rag.vector-store-type` | `memory` | `milvus` |
 | `rag.embedding.type` | `douzone` | `douzone` |
 | `rag.guardrail.enabled` | `false` (권장) | `true` |
 | `rag.query-preprocess.enabled` | `false` (권장) | `true` (기본값) |
@@ -268,8 +274,12 @@ export DB_PASSWORD=ragpass                                        # DB 패스워
 | `OPENAI_API_KEY` | 발급받은 키 | 발급받은 키 또는 사내 관리 키 |
 | `DOUZONE_EMBEDDING_URL` | 사내망 URL **(필수, 기본값 없음)** | 사내망 URL |
 | `DB_PASSWORD` | 미설정 시 `ragpass` | 운영 DB 패스워드 |
+| `MILVUS_HOST` | `localhost` (기본값) | Milvus 서버 호스트 |
+| `MILVUS_PORT` | `19530` (기본값) | Milvus gRPC 포트 |
+| `MILVUS_USERNAME` | `root` (기본값) | Milvus 접속 계정 |
+| `MILVUS_PASSWORD` | `milvus` (기본값) | Milvus 패스워드 **(운영 시 반드시 변경)** |
 
-> **임베딩 모델 전환 시 주의**: `rag.embedding.type`을 변경하면 벡터 공간이 달라지므로 기존 문서를 전부 재수집(re-ingest)해야 한다. `vector_store` 테이블은 DROP 후 재생성 필요.
+> **임베딩 모델 전환 시 주의**: `rag.embedding.type`을 변경하면 벡터 공간이 달라지므로 기존 문서를 전부 재수집(re-ingest)해야 한다. Milvus 컬렉션 DROP 후 재생성 필요.
 
 ### 테스트 실행
 
@@ -312,7 +322,7 @@ PATCH /api/rag/feedback/{requestId}
 DELETE /api/documents/{docId}
   └─ DocumentService.deleteDocument(docId)
        └─ DocumentManagementPort.deleteByDocId(docId)
-            ├─ PgDocumentAdapter  → vector_store 삭제(VectorStore) + rag_chunks 삭제
+            ├─ PgDocumentAdapter  → Milvus 삭제(rag_chunks의 chunkId 기반) + rag_chunks 삭제
             └─ InMemoryKeywordSearchAdapter → 인메모리 store 삭제만 수행
 ```
 
@@ -334,7 +344,7 @@ RagController
        │    └─ NoOpQueryPreprocessAdapter (rag.query-preprocess.enabled=false 시 원문 그대로)
        ├─ 3) HybridSearchService.search()
        │    ├─ KeywordSearchPort  (keywordQuery로 BM25 검색, 실패 시 빈 결과로 degrade)
-       │    ├─ VectorSearchPort   (vectorQuery로 Cosine 검색, HyDE, 실패 시 빈 결과로 degrade)
+       │    ├─ VectorSearchPort   (vectorQuery로 Milvus Cosine 검색, HyDE, 실패 시 빈 결과로 degrade)
        │    │    ※ 두 채널 모두 실패 시 SearchException(S0001) → 503 반환
        │    ├─ RrfRankFusion      (Reciprocal Rank Fusion, 원문 query 유지)
        │    └─ RerankPort         (score 순 또는 날짜 순, 원문 query 사용)
@@ -362,8 +372,8 @@ IngestionController
        │    └─ SemanticChunkSplitter   [strategy=semantic, 기본값]
        │         ├─ OpenAI ChatClient → 구조 판단 + JSON chunks 반환
        │         └─ (LLM이 구조 없다고 판단·LLM 실패·과대 텍스트) → TokenTextSplitter 대체
-       ├─ VectorStore.add()    (임베딩 + PGVector 저장)
-       └─ KeywordIndexPort     (BM25 색인 등록, 실패 시 VectorStore 롤백 후 IngestionException)
+       ├─ VectorStore.add()    (임베딩 + Milvus 저장)
+       └─ KeywordIndexPort     (BM25 색인 등록, 실패 시 Milvus 롤백 후 IngestionException)
 ```
 
 ---

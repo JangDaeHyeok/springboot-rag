@@ -38,6 +38,10 @@ public interface RagChunkJpaRepository extends JpaRepository<RagChunkEntity, Str
 
     boolean existsByDocId(String docId);
 
+    /** docId에 속한 chunkId 목록을 반환한다. Milvus 벡터 삭제 시 사용. */
+    @Query("SELECT r.chunkId FROM RagChunkEntity r WHERE r.docId = :docId")
+    List<String> findChunkIdsByDocId(@Param("docId") String docId);
+
     /** docId 별 문서 요약 정보. 반환: [doc_id, source, domain, version, tenant_id, chunk_count, first_created_at] */
     @Query("""
             SELECT r.docId, r.source, r.domain, r.version, r.tenantId, COUNT(r), MIN(r.createdAt)

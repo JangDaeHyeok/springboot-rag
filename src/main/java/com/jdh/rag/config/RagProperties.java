@@ -10,6 +10,7 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 @ConfigurationProperties(prefix = "rag")
 public record RagProperties(
         @DefaultValue("postgres") String keywordSearchType,
+        @DefaultValue("milvus")   String vectorStoreType,
         @DefaultValue("60")       int    rrfK,
         @DefaultValue("50")       int    topNKeyword,
         @DefaultValue("50")       int    topNVector,

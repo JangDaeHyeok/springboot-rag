@@ -43,15 +43,21 @@ spring:
       embedding:
         enabled: false
 
-    # ── Spring AI PGVector ───────────────────────────────────────────────────
+    # ── Spring AI Milvus ─────────────────────────────────────────────────────
     # dimensions 는 임베딩 모델 출력 차원과 반드시 동일하게 설정한다.
-    # 임베딩 모델을 변경할 경우 vector_store 테이블을 DROP 후 재생성이 필요하다.
+    # 임베딩 모델을 변경할 경우 Milvus 컬렉션 DROP 후 재수집이 필요하다.
     vectorstore:
-      pgvector:
+      milvus:
+        client:
+          host: ${MILVUS_HOST:localhost}
+          port: ${MILVUS_PORT:19530}
+          username: ${MILVUS_USERNAME:root}
+          password: ${MILVUS_PASSWORD:milvus}
         initialize-schema: true
-        index-type: HNSW
-        distance-type: COSINE_DISTANCE
-        dimensions: 1024          # text-embedding-3-small dimensions 와 동일
+        collection-name: vector_store
+        embedding-dimension: 1024
+        index-type: IVF_FLAT
+        metric-type: COSINE
 
 # ── RAG 파이프라인 ─────────────────────────────────────────────────────────────
 rag:
@@ -75,6 +81,11 @@ rag:
 
   # 키워드 검색 어댑터: postgres(운영) | memory(개발·테스트)
   keyword-search-type: postgres
+
+  # 벡터 저장소 어댑터: milvus(운영) | memory(개발·테스트)
+  # - milvus : Milvus Standalone (docker compose up -d)
+  # - memory : Spring AI SimpleVectorStore (인메모리, 재시작 시 초기화)
+  vector-store-type: milvus
 
   rrf-k: 60
   top-n-keyword: 50

@@ -87,7 +87,7 @@ class IngestionServiceTest {
     @Test
     @DisplayName("vectorStore.add 실패 시 IngestionException(VECTOR_STORE_FAILED)을 던진다")
     void vectorStoreFailure_throwsIngestionException() {
-        doThrow(new RuntimeException("PgVector 연결 실패"))
+        doThrow(new RuntimeException("VectorStore 연결 실패"))
                 .when(vectorStore).add(anyList());
 
         IngestionRequest request = request("doc-001", "충분히 긴 내용입니다. ".repeat(10));
@@ -101,7 +101,7 @@ class IngestionServiceTest {
     @Test
     @DisplayName("IngestionException에 원인 예외가 포함된다")
     void vectorStoreFailure_causeIsPreserved() {
-        RuntimeException cause = new RuntimeException("PgVector 연결 실패");
+        RuntimeException cause = new RuntimeException("VectorStore 연결 실패");
         doThrow(cause).when(vectorStore).add(anyList());
 
         IngestionRequest request = request("doc-001", "충분히 긴 내용입니다. ".repeat(10));
@@ -197,7 +197,7 @@ class IngestionServiceTest {
     @Test
     @DisplayName("ingestResource에서 vectorStore.add 실패 시 IngestionException(VECTOR_STORE_FAILED)을 던진다")
     void ingestResource_vectorStoreFailure_throwsException() {
-        doThrow(new RuntimeException("PgVector 오류")).when(vectorStore).add(anyList());
+        doThrow(new RuntimeException("VectorStore 오류")).when(vectorStore).add(anyList());
 
         // 충분한 텍스트를 포함한 plain text 리소스
         Resource resource = textResource("doc-file", "긴 텍스트 내용 ".repeat(20));
