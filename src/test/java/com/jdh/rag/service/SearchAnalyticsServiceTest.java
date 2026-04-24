@@ -1,5 +1,6 @@
 package com.jdh.rag.service;
 
+import com.jdh.rag.domain.SearchLogPoint;
 import com.jdh.rag.domain.SearchQualityReport;
 import com.jdh.rag.port.SearchAnalyticsPort;
 import org.junit.jupiter.api.DisplayName;
@@ -16,6 +17,7 @@ import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -106,6 +108,77 @@ class SearchAnalyticsServiceTest {
 
         // when
         SearchQualityReport result = service.getReport(Instant.now().minus(1, ChronoUnit.DAYS), Instant.now());
+
+        // then
+        assertThat(result).isEqualTo(expected);
+    }
+
+    // ── 산점도 포인트 ─────────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("산점도: from, to, limit 모두 지정하면 그대로 포트에 전달한다")
+    void 산점도_from_to_limit_지정이면_그대로_포트에_전달한다() {
+        // given
+        Instant from = Instant.parse("2026-04-01T00:00:00Z");
+        Instant to   = Instant.parse("2026-04-07T23:59:59Z");
+        when(searchAnalyticsPort.getScatterPoints(from, to, 100)).thenReturn(List.of());
+
+        // when
+        service.getScatterPoints(from, to, 100);
+
+        // then
+        verify(searchAnalyticsPort).getScatterPoints(from, to, 100);
+    }
+
+    @Test
+    @DisplayName("산점도: limit가 null이면 기본값 5000으로 대체된다")
+    void 산점도_limit가_null이면_기본값으로_대체된다() {
+        // given
+        Instant from = Instant.parse("2026-04-01T00:00:00Z");
+        Instant to   = Instant.parse("2026-04-07T23:59:59Z");
+        when(searchAnalyticsPort.getScatterPoints(any(), any(), anyInt())).thenReturn(List.of());
+
+        ArgumentCaptor<Integer> limitCaptor = ArgumentCaptor.forClass(Integer.class);
+
+        // when
+        service.getScatterPoints(from, to, null);
+
+        // then
+        verify(searchAnalyticsPort).getScatterPoints(any(), any(), limitCaptor.capture());
+        assertThat(limitCaptor.getValue()).isEqualTo(5000);
+    }
+
+    @Test
+    @DisplayName("산점도: from, to 모두 null이면 최근 7일 + 기본 limit 적용")
+    void 산점도_from_to_모두_null이면_최근_7일_기본_limit_적용() {
+        // given
+        when(searchAnalyticsPort.getScatterPoints(any(), any(), anyInt())).thenReturn(List.of());
+
+        ArgumentCaptor<Instant> fromCaptor  = ArgumentCaptor.forClass(Instant.class);
+        ArgumentCaptor<Instant> toCaptor    = ArgumentCaptor.forClass(Instant.class);
+        ArgumentCaptor<Integer> limitCaptor = ArgumentCaptor.forClass(Integer.class);
+
+        // when
+        service.getScatterPoints(null, null, null);
+
+        // then
+        verify(searchAnalyticsPort).getScatterPoints(fromCaptor.capture(), toCaptor.capture(), limitCaptor.capture());
+        long diffDays = ChronoUnit.DAYS.between(fromCaptor.getValue(), toCaptor.getValue());
+        assertThat(diffDays).isEqualTo(7);
+        assertThat(limitCaptor.getValue()).isEqualTo(5000);
+    }
+
+    @Test
+    @DisplayName("산점도: 포트 반환값을 그대로 전달한다")
+    void 산점도_포트_반환값을_그대로_전달한다() {
+        // given
+        var expected = List.of(
+                new SearchLogPoint("req-1", "doc-1", "chunk-1", 0.85, 1, true, true, "vector", Instant.now())
+        );
+        when(searchAnalyticsPort.getScatterPoints(any(), any(), anyInt())).thenReturn(expected);
+
+        // when
+        var result = service.getScatterPoints(Instant.now().minus(1, ChronoUnit.DAYS), Instant.now(), 100);
 
         // then
         assertThat(result).isEqualTo(expected);

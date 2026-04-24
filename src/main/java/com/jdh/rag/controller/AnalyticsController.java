@@ -1,5 +1,6 @@
 package com.jdh.rag.controller;
 
+import com.jdh.rag.domain.SearchLogPoint;
 import com.jdh.rag.domain.SearchQualityReport;
 import com.jdh.rag.service.SearchAnalyticsService;
 import lombok.RequiredArgsConstructor;
@@ -11,6 +12,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Instant;
+import java.util.List;
 
 /**
  * 검색 품질 분석 API.
@@ -26,14 +28,6 @@ public class AnalyticsController {
      * GET /api/analytics/search?from=...&to=...
      *
      * 검색 품질 리포트를 반환한다. from/to 미입력 시 최근 7일 기준.
-     *
-     * 리포트 항목:
-     *   - totalRequests        : 기간 내 총 요청 건수
-     *   - feedbackCount        : 피드백이 수집된 요청 건수
-     *   - overallAcceptanceRate: 전체 답변 수락률 (피드백 없으면 null)
-     *   - scoreBuckets         : 점수 구간별 건수 + 수락률 (cosine threshold 튜닝용)
-     *   - channelStats         : 검색 채널별 건수 + 평균 점수
-     *   - dailyStats           : 일별 요청 건수 추이
      */
     @GetMapping("/search")
     public ResponseEntity<SearchQualityReport> getSearchReport(
@@ -41,5 +35,20 @@ public class AnalyticsController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to
     ) {
         return ResponseEntity.ok(searchAnalyticsService.getReport(from, to));
+    }
+
+    /**
+     * GET /api/analytics/scatter?from=...&to=...&limit=...
+     *
+     * 산점도 시각화용 개별 검색 로그 포인트를 반환한다.
+     * cosine_score 가 존재하는 행만 최신순으로 limit 건까지 반환한다.
+     */
+    @GetMapping("/scatter")
+    public ResponseEntity<List<SearchLogPoint>> getScatterPoints(
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to,
+            @RequestParam(required = false) Integer limit
+    ) {
+        return ResponseEntity.ok(searchAnalyticsService.getScatterPoints(from, to, limit));
     }
 }

@@ -1,8 +1,10 @@
 package com.jdh.rag.port;
 
+import com.jdh.rag.domain.SearchLogPoint;
 import com.jdh.rag.domain.SearchQualityReport;
 
 import java.time.Instant;
+import java.util.List;
 
 /**
  * 검색 품질 분석 포트.
@@ -11,4 +13,6 @@ import java.time.Instant;
 public interface SearchAnalyticsPort {
 
     SearchQualityReport getReport(Instant from, Instant to);
+
+    List<SearchLogPoint> getScatterPoints(Instant from, Instant to, int limit);
 }

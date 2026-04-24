@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>RAG 유사도 산점도</title>
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js" charset="utf-8"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', -apple-system, sans-serif; background: #f5f7fa; color: #333; }
+
+        .header {
+            background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+            color: #fff; padding: 24px 32px;
+        }
+        .header h1 { font-size: 22px; font-weight: 600; }
+        .header p { font-size: 13px; color: #94a3b8; margin-top: 4px; }
+
+        .controls {
+            display: flex; gap: 16px; align-items: flex-end; flex-wrap: wrap;
+            padding: 20px 32px; background: #fff; border-bottom: 1px solid #e2e8f0;
+        }
+        .control-group { display: flex; flex-direction: column; gap: 4px; }
+        .control-group label { font-size: 12px; font-weight: 600; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
+        .control-group input, .control-group select {
+            padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 6px;
+            font-size: 14px; background: #fff; color: #334155;
+        }
+        .control-group input:focus, .control-group select:focus {
+            outline: none; border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+        button {
+            padding: 8px 20px; background: #3b82f6; color: #fff; border: none;
+            border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer;
+            transition: background 0.2s;
+        }
+        button:hover { background: #2563eb; }
+        button:disabled { background: #94a3b8; cursor: not-allowed; }
+
+        .stats-bar {
+            display: flex; gap: 24px; padding: 16px 32px; background: #fff;
+            border-bottom: 1px solid #e2e8f0; flex-wrap: wrap;
+        }
+        .stat { display: flex; flex-direction: column; }
+        .stat .value { font-size: 20px; font-weight: 700; color: #1e293b; }
+        .stat .label { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
+
+        .chart-container { padding: 24px 32px; }
+        #scatter-plot { width: 100%; height: 600px; background: #fff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+
+        .threshold-control {
+            display: flex; align-items: center; gap: 12px; padding: 0 32px 24px;
+        }
+        .threshold-control label { font-size: 13px; font-weight: 600; color: #475569; }
+        .threshold-control input[type="range"] { flex: 1; max-width: 400px; accent-color: #3b82f6; }
+        .threshold-value {
+            font-size: 16px; font-weight: 700; color: #3b82f6;
+            min-width: 48px; text-align: center;
+        }
+
+        .legend-info {
+            padding: 0 32px 24px; display: flex; gap: 24px; flex-wrap: wrap;
+        }
+        .legend-item { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #475569; }
+        .legend-dot { width: 12px; height: 12px; border-radius: 50%; }
+
+        .empty-state {
+            text-align: center; padding: 80px 32px; color: #94a3b8;
+        }
+        .empty-state h2 { font-size: 18px; margin-bottom: 8px; color: #64748b; }
+
+        .loading { display: none; text-align: center; padding: 40px; color: #64748b; }
+        .loading.active { display: block; }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>RAG Similarity Scatter Plot</h1>
+        <p>Cosine Score vs Rank - cosine threshold tuning</p>
+    </div>
+
+    <div class="controls">
+        <div class="control-group">
+            <label>From</label>
+            <input type="datetime-local" id="from-input">
+        </div>
+        <div class="control-group">
+            <label>To</label>
+            <input type="datetime-local" id="to-input">
+        </div>
+        <div class="control-group">
+            <label>Limit</label>
+            <input type="number" id="limit-input" value="5000" min="100" max="50000" step="100">
+        </div>
+        <div class="control-group">
+            <label>X Axis</label>
+            <select id="x-axis-select">
+                <option value="rank">Rank</option>
+                <option value="createdAt">Time</option>
+            </select>
+        </div>
+        <div class="control-group">
+            <label>Color By</label>
+            <select id="color-select">
+                <option value="channel">Channel</option>
+                <option value="usedInPrompt">Used in Prompt</option>
+                <option value="answerAccepted">Feedback</option>
+            </select>
+        </div>
+        <button id="load-btn" onclick="loadData()">Load</button>
+    </div>
+
+    <div class="stats-bar" id="stats-bar" style="display:none;">
+        <div class="stat"><span class="value" id="stat-total">-</span><span class="label">Total Points</span></div>
+        <div class="stat"><span class="value" id="stat-avg-score">-</span><span class="label">Avg Score</span></div>
+        <div class="stat"><span class="value" id="stat-above">-</span><span class="label">Above Threshold</span></div>
+        <div class="stat"><span class="value" id="stat-below">-</span><span class="label">Below Threshold</span></div>
+        <div class="stat"><span class="value" id="stat-acceptance">-</span><span class="label">Acceptance Rate</span></div>
+    </div>
+
+    <div class="threshold-control" id="threshold-section" style="display:none;">
+        <label>Cosine Threshold:</label>
+        <input type="range" id="threshold-slider" min="0" max="1" step="0.01" value="0.6">
+        <span class="threshold-value" id="threshold-display">0.60</span>
+    </div>
+
+    <div class="legend-info" id="legend-info" style="display:none;"></div>
+
+    <div class="loading" id="loading">Loading data...</div>
+
+    <div class="chart-container">
+        <div id="scatter-plot"></div>
+    </div>
+
+    <div class="empty-state" id="empty-state">
+        <h2>No Data Loaded</h2>
+        <p>Set date range and click "Load" to display the scatter plot.</p>
+    </div>
+
+<script>
+    const CHANNEL_COLORS = { lexical: '#f59e0b', vector: '#3b82f6', fused: '#10b981' };
+    const PROMPT_COLORS  = { true: '#3b82f6', false: '#cbd5e1' };
+    const FEEDBACK_COLORS = { accepted: '#10b981', rejected: '#ef4444', none: '#cbd5e1' };
+
+    let rawData = [];
+
+    (function initDates() {
+        const now = new Date();
+        const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        document.getElementById('to-input').value = toLocalISOString(now);
+        document.getElementById('from-input').value = toLocalISOString(weekAgo);
+    })();
+
+    function toLocalISOString(d) {
+        const pad = n => String(n).padStart(2, '0');
+        return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+
+    async function loadData() {
+        const btn = document.getElementById('load-btn');
+        const loading = document.getElementById('loading');
+        btn.disabled = true;
+        loading.classList.add('active');
+        document.getElementById('empty-state').style.display = 'none';
+
+        const from  = document.getElementById('from-input').value;
+        const to    = document.getElementById('to-input').value;
+        const limit = document.getElementById('limit-input').value;
+
+        const params = new URLSearchParams();
+        if (from)  params.set('from', new Date(from).toISOString());
+        if (to)    params.set('to', new Date(to).toISOString());
+        if (limit) params.set('limit', limit);
+
+        try {
+            const resp = await fetch(`/api/analytics/scatter?${params}`);
+            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+            rawData = await resp.json();
+
+            if (rawData.length === 0) {
+                document.getElementById('empty-state').style.display = 'block';
+                document.getElementById('empty-state').innerHTML =
+                    '<h2>No Results</h2><p>No search log data found for the selected period.</p>';
+                Plotly.purge('scatter-plot');
+                document.getElementById('stats-bar').style.display = 'none';
+                document.getElementById('threshold-section').style.display = 'none';
+                document.getElementById('legend-info').style.display = 'none';
+            } else {
+                document.getElementById('stats-bar').style.display = 'flex';
+                document.getElementById('threshold-section').style.display = 'flex';
+                document.getElementById('legend-info').style.display = 'flex';
+                renderPlot();
+            }
+        } catch (e) {
+            alert('Failed to load data: ' + e.message);
+            document.getElementById('empty-state').style.display = 'block';
+        } finally {
+            btn.disabled = false;
+            loading.classList.remove('active');
+        }
+    }
+
+    function renderPlot() {
+        const xAxis   = document.getElementById('x-axis-select').value;
+        const colorBy = document.getElementById('color-select').value;
+        const threshold = parseFloat(document.getElementById('threshold-slider').value);
+
+        updateStats(threshold);
+        updateLegend(colorBy);
+
+        const groups = groupBy(rawData, colorBy);
+        const traces = [];
+
+        for (const [key, points] of Object.entries(groups)) {
+            const xs = points.map(p => xAxis === 'rank' ? p.rank : new Date(p.createdAt));
+            const ys = points.map(p => p.cosineScore);
+            const texts = points.map(p =>
+                `Doc: ${p.docId || '-'}<br>` +
+                `Chunk: ${(p.chunkId || '-').substring(0, 12)}...<br>` +
+                `Score: ${(p.cosineScore || 0).toFixed(4)}<br>` +
+                `Rank: ${p.rank}<br>` +
+                `Channel: ${p.channel || '-'}<br>` +
+                `Used: ${p.usedInPrompt}<br>` +
+                `Feedback: ${p.answerAccepted === null ? 'N/A' : p.answerAccepted}`
+            );
+
+            traces.push({
+                x: xs, y: ys, text: texts,
+                mode: 'markers',
+                type: 'scatter',
+                name: key,
+                marker: {
+                    color: getColor(colorBy, key),
+                    size: 7,
+                    opacity: 0.7,
+                    line: { width: 0.5, color: '#fff' }
+                },
+                hovertemplate: '%{text}<extra></extra>'
+            });
+        }
+
+        const layout = {
+            xaxis: {
+                title: xAxis === 'rank' ? 'Rank Position' : 'Time',
+                type: xAxis === 'createdAt' ? 'date' : 'linear',
+                gridcolor: '#f1f5f9'
+            },
+            yaxis: { title: 'Cosine Score', range: [-0.05, 1.05], gridcolor: '#f1f5f9' },
+            shapes: [{
+                type: 'line', x0: 0, x1: 1, xref: 'paper',
+                y0: threshold, y1: threshold,
+                line: { color: '#ef4444', width: 2, dash: 'dash' }
+            }],
+            annotations: [{
+                x: 1, xref: 'paper', xanchor: 'right',
+                y: threshold, yanchor: 'bottom',
+                text: `Threshold: ${threshold.toFixed(2)}`,
+                showarrow: false,
+                font: { color: '#ef4444', size: 12 },
+                bgcolor: 'rgba(255,255,255,0.8)',
+                borderpad: 4
+            }],
+            legend: { orientation: 'h', y: -0.15 },
+            margin: { t: 20, r: 20, b: 60, l: 60 },
+            plot_bgcolor: '#fff',
+            paper_bgcolor: '#fff',
+            hovermode: 'closest'
+        };
+
+        Plotly.react('scatter-plot', traces, layout, {
+            responsive: true,
+            displayModeBar: true,
+            modeBarButtonsToRemove: ['lasso2d', 'sendDataToCloud']
+        });
+    }
+
+    function groupBy(data, key) {
+        const groups = {};
+        for (const p of data) {
+            let groupKey;
+            if (key === 'channel') groupKey = p.channel || 'unknown';
+            else if (key === 'usedInPrompt') groupKey = String(p.usedInPrompt);
+            else groupKey = p.answerAccepted === null ? 'none' : (p.answerAccepted ? 'accepted' : 'rejected');
+            (groups[groupKey] ??= []).push(p);
+        }
+        return groups;
+    }
+
+    function getColor(colorBy, key) {
+        if (colorBy === 'channel') return CHANNEL_COLORS[key] || '#94a3b8';
+        if (colorBy === 'usedInPrompt') return PROMPT_COLORS[key] || '#94a3b8';
+        return FEEDBACK_COLORS[key] || '#94a3b8';
+    }
+
+    function updateStats(threshold) {
+        const scores = rawData.map(p => p.cosineScore).filter(s => s != null);
+        const avg = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
+        const above = scores.filter(s => s >= threshold).length;
+        const below = scores.filter(s => s < threshold).length;
+        const withFeedback = rawData.filter(p => p.answerAccepted !== null);
+        const accepted = withFeedback.filter(p => p.answerAccepted === true).length;
+        const rate = withFeedback.length > 0 ? (accepted / withFeedback.length * 100).toFixed(1) + '%' : 'N/A';
+
+        document.getElementById('stat-total').textContent = rawData.length.toLocaleString();
+        document.getElementById('stat-avg-score').textContent = avg.toFixed(4);
+        document.getElementById('stat-above').textContent = above.toLocaleString();
+        document.getElementById('stat-below').textContent = below.toLocaleString();
+        document.getElementById('stat-acceptance').textContent = rate;
+    }
+
+    function updateLegend(colorBy) {
+        const el = document.getElementById('legend-info');
+        let colors;
+        if (colorBy === 'channel') colors = CHANNEL_COLORS;
+        else if (colorBy === 'usedInPrompt') colors = PROMPT_COLORS;
+        else colors = FEEDBACK_COLORS;
+
+        el.innerHTML = Object.entries(colors).map(([k, c]) =>
+            `<div class="legend-item"><div class="legend-dot" style="background:${c}"></div>${k}</div>`
+        ).join('');
+    }
+
+    document.getElementById('threshold-slider').addEventListener('input', function() {
+        document.getElementById('threshold-display').textContent = parseFloat(this.value).toFixed(2);
+        if (rawData.length > 0) renderPlot();
+    });
+
+    document.getElementById('x-axis-select').addEventListener('change', () => { if (rawData.length > 0) renderPlot(); });
+    document.getElementById('color-select').addEventListener('change', () => { if (rawData.length > 0) renderPlot(); });
+</script>
+</body>
+</html>

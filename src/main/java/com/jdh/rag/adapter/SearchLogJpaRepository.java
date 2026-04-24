@@ -90,4 +90,20 @@ public interface SearchLogJpaRepository extends JpaRepository<SearchLogEntity, L
             ORDER BY day
             """, nativeQuery = true)
     List<Object[]> findDailyRequestCounts(@Param("from") Instant from, @Param("to") Instant to);
+
+    /**
+     * 산점도용 개별 검색 로그 포인트.
+     * cosine_score 가 존재하는 행만 반환하며, 최신순으로 limit 건까지 가져온다.
+     * 반환: [request_id, doc_id, chunk_id, cosine_score, rank_pos, used_in_prompt, answer_accepted, channel, created_at]
+     */
+    @Query(value = """
+            SELECT request_id, doc_id, chunk_id, cosine_score, rank_pos,
+                   used_in_prompt, answer_accepted, channel, created_at
+            FROM search_logs
+            WHERE created_at BETWEEN :from AND :to
+              AND cosine_score IS NOT NULL
+            ORDER BY created_at DESC
+            LIMIT :limit
+            """, nativeQuery = true)
+    List<Object[]> findScatterPoints(@Param("from") Instant from, @Param("to") Instant to, @Param("limit") int limit);
 }

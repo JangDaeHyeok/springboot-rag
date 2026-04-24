@@ -3,6 +3,7 @@ package com.jdh.rag.adapter;
 import com.jdh.rag.domain.ChannelStat;
 import com.jdh.rag.domain.DailyRequestCount;
 import com.jdh.rag.domain.ScoreBucket;
+import com.jdh.rag.domain.SearchLogPoint;
 import com.jdh.rag.domain.SearchQualityReport;
 import com.jdh.rag.port.SearchAnalyticsPort;
 import lombok.RequiredArgsConstructor;
@@ -51,9 +52,29 @@ public class PgSearchAnalyticsAdapter implements SearchAnalyticsPort {
         return new ChannelStat(RowMapper.str(row[0]), RowMapper.toLong(row[1]), RowMapper.toDouble(row[2]));
     }
 
+    @Override
+    public List<SearchLogPoint> getScatterPoints(Instant from, Instant to, int limit) {
+        return searchLogJpaRepository.findScatterPoints(from, to, limit)
+                .stream().map(this::toSearchLogPoint).toList();
+    }
+
     private DailyRequestCount toDailyCount(Object[] row) {
         LocalDate date = row[0] instanceof java.sql.Date d ? d.toLocalDate()
                 : LocalDate.parse(RowMapper.str(row[0]));
         return new DailyRequestCount(date, RowMapper.toLong(row[1]));
+    }
+
+    private SearchLogPoint toSearchLogPoint(Object[] row) {
+        return new SearchLogPoint(
+                RowMapper.str(row[0]),
+                RowMapper.str(row[1]),
+                RowMapper.str(row[2]),
+                RowMapper.toDouble(row[3]),
+                row[4] instanceof Number n ? n.intValue() : 0,
+                row[5] instanceof Boolean b ? b : false,
+                row[6] instanceof Boolean b ? b : null,
+                RowMapper.str(row[7]),
+                row[8] instanceof java.sql.Timestamp ts ? ts.toInstant() : Instant.parse(RowMapper.str(row[8]))
+        );
     }
 }

@@ -247,6 +247,42 @@ GET /api/analytics/search?from=2026-04-01T00:00:00Z&to=2026-04-07T23:59:59Z
 
 `scoreBuckets` 의 `acceptanceRate` 를 보고 수락률이 낮은 점수 구간을 파악해 `rag.vector-threshold` 를 조정한다.
 
+### 유사도 산점도 (Scatter Plot)
+
+```
+GET /api/analytics/scatter?from=2026-04-01T00:00:00Z&to=2026-04-07T23:59:59Z&limit=5000
+```
+
+`from/to` 미입력 시 최근 7일, `limit` 미입력 시 5000건 기준.
+
+**응답 예시**
+
+```json
+[
+  {
+    "requestId": "550e8400-...",
+    "docId": "doc-001",
+    "chunkId": "chunk-abc",
+    "cosineScore": 0.82,
+    "rank": 1,
+    "usedInPrompt": true,
+    "answerAccepted": true,
+    "channel": "vector",
+    "createdAt": "2026-04-05T10:30:00Z"
+  }
+]
+```
+
+인터랙티브 산점도 UI는 서버 실행 후 `/scatter.html` 에서 확인할 수 있다.
+
+| 기능 | 설명 |
+|---|---|
+| X축 전환 | Rank Position / Time |
+| 색상 기준 | Channel(lexical/vector/fused), Used in Prompt, Feedback |
+| Threshold 슬라이더 | cosine threshold 라인을 실시간 조정하며 상/하 분포 확인 |
+| 통계 바 | 총 데이터 수, 평균 점수, 임계값 상·하 건수, 수락률 |
+| 기간·건수 필터 | from, to, limit 파라미터로 조회 범위 조절 |
+
 ---
 
 ## 주요 설정

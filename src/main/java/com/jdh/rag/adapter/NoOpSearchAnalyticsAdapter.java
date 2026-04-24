@@ -1,5 +1,6 @@
 package com.jdh.rag.adapter;
 
+import com.jdh.rag.domain.SearchLogPoint;
 import com.jdh.rag.domain.SearchQualityReport;
 import com.jdh.rag.port.SearchAnalyticsPort;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -19,5 +20,10 @@ public class NoOpSearchAnalyticsAdapter implements SearchAnalyticsPort {
     @Override
     public SearchQualityReport getReport(Instant from, Instant to) {
         return new SearchQualityReport(0, 0, null, List.of(), List.of(), List.of());
+    }
+
+    @Override
+    public List<SearchLogPoint> getScatterPoints(Instant from, Instant to, int limit) {
+        return List.of();
     }
 }
